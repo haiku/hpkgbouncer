@@ -3,12 +3,27 @@ extern crate toml;
 #[macro_use]
 extern crate serde_derive;
 
-use s3::bucket::Bucket;
-use s3::credentials::Credentials;
+use std::process;
 
-mod endpointconfig;
+mod endpoint;
 
 fn main() {
-    let endpoints = endpointconfig::from_file("config-sample.toml");
-    println!("{:?}", endpoints.unwrap());
+    let endpoints = match endpoint::from_file("config-sample.toml") {
+		Ok(o) => o,
+		Err(e) => {
+			println!("Error: {}", e);
+			process::exit(1);
+		}
+	};
+
+	for (name, config) in endpoints.iter() {
+		println!("key: {} val: {:?}", name, config);
+		match endpoint::process(&config){
+			Ok(_) => {},
+			Err(e) => {
+				println!("Error: {}", e);
+				process::exit(1);
+			}
+		}
+	}
 }
