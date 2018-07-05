@@ -5,6 +5,7 @@ use std::path::Path;
 use std::error::Error;
 use std::io::Read;
 use std::collections::HashMap;
+use std::clone::Clone;
 
 use regex::Regex;
 
@@ -23,7 +24,7 @@ pub struct Endpoint {
     pub s3_secret: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Inventory {
     pub name: String,
     pub version: Option<String>,
@@ -35,9 +36,10 @@ impl PartialEq for Inventory {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Architecture {
     pub prefix: String,
+    pub latest: Option<Inventory>,
     pub objects: Vec<Inventory>,
 }
 
@@ -101,7 +103,7 @@ pub fn process_s3(endpoint: &Endpoint) -> Result<Vec<Architecture>, Box<Error>> 
             if obj.key.is_some() {
                 let key = obj.clone().key.unwrap();
                 if key.ends_with("/") {
-                    let arch = Architecture { prefix: key, objects: Vec::new() };
+                    let arch = Architecture { prefix: key, latest: None, objects: Vec::new() };
                     if !architectures.contains(&arch) {
                         architectures.push(arch);
                     }
@@ -113,9 +115,14 @@ pub fn process_s3(endpoint: &Endpoint) -> Result<Vec<Architecture>, Box<Error>> 
         }
     }
 
+    let file_re = Regex::new(r"^.*(hrev\d+).*\.zip$")?;
+    let path_re = Regex::new(r"^.*(hrev\d+)/$")?;
+    let hrev_re = Regex::new(r"hrev(\d+)")?;
+
     for ref mut arch in &mut architectures {
         let mut request = ListObjectsV2Request { bucket: s3_bucket.clone(), prefix: Some(arch.prefix.clone()),
             ..Default::default() };
+        let mut latest = 0;
         loop {
             let result = s3_client.list_objects_v2(&request).sync()?;
             if !result.contents.is_some() {
@@ -128,16 +135,24 @@ pub fn process_s3(endpoint: &Endpoint) -> Result<Vec<Architecture>, Box<Error>> 
                 if obj.key.is_some() {
                     let key = obj.clone().key.unwrap();
                     let file = key.trim_left_matches(&arch.prefix);
-                    let file_re = Regex::new(r"^.*(hrev\d+).*\.zip$")?;
-                    let path_re = Regex::new(r"^.*(hrev\d+)/$")?;
+                    let mut inventory = Inventory { name: file.clone().to_string(), version: None };
                     if file_re.is_match(file) {
                         let caps = file_re.captures(file).unwrap();
-                        let inventory = Inventory { name: file.clone().to_string(), version: Some(caps[1].to_string()) };
-                        arch.objects.push(inventory);
+                        inventory.version = Some(caps[1].to_string());
+                        arch.objects.push(inventory.clone());
                     } else if path_re.is_match(file) {
                         let caps = path_re.captures(file).unwrap();
-                        let inventory = Inventory { name: file.clone().to_string(), version: Some(caps[1].to_string()) };
-                        arch.objects.push(inventory);
+                        inventory.version = Some(caps[1].to_string());
+                        arch.objects.push(inventory.clone());
+                    } else {
+                        continue
+                    }
+                    let version = inventory.version.clone().unwrap();
+                    let hrev_string: String = hrev_re.captures(&version).unwrap()[1].to_string();
+                    let hrev: i32 = hrev_string.parse()?;
+                    if hrev > latest {
+                        latest = hrev;
+                        arch.latest = Some(inventory);
                     }
                 } else {
                     println!("got a borked S3 obj: {:?}", obj);
