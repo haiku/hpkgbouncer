@@ -113,7 +113,7 @@ pub fn process_s3(endpoint: &Endpoint) -> Result<Vec<Architecture>, Box<Error>> 
 
     println!("Architectures: {:?}", architectures);
 
-    for arch in architectures {
+    for mut arch in architectures {
         let mut request = ListObjectsV2Request { bucket: s3_bucket.clone(), prefix: Some(arch.prefix),
             ..Default::default() };
         loop {
