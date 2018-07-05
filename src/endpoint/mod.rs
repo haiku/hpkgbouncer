@@ -145,7 +145,5 @@ pub fn process_s3(endpoint: &Endpoint) -> Result<Vec<Architecture>, Box<Error>> 
             }
         }
     }
-    println!("Architectures: {:?}", architectures);
-
     return Ok(architectures)
 }

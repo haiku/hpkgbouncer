@@ -14,29 +14,30 @@ use std::env;
 mod endpoint;
 
 fn main() {
-    let config_file = match env::args().nth(1) {
-        Some(c) => c,
-        None => {
-            println!("Usage: {} <config_toml>", env::args().nth(1).unwrap_or("hpkgserve".to_string()));
-            process::exit(1);
-        }
-    };
-    let endpoints = match endpoint::from_file(config_file) {
+    let args: Vec<_> = env::args().collect();
+    if args.len() < 3 {
+        println!("Usage: {} <config_toml> <region>", args[0]);
+        process::exit(1);
+    }
+    let endpoints = match endpoint::from_file(args[1].clone()) {
 		Ok(o) => o,
 		Err(e) => {
 			println!("Error: {}", e);
 			process::exit(1);
 		}
 	};
+    if !endpoints.contains_key(&args[2]) {
+        println!("Error: config_toml doesn't contain region {}", args[2]);
+        process::exit(1);
+    }
 
-	for (name, config) in endpoints.iter() {
-		println!("key: {} val: {:?}", name, config);
-		match endpoint::process_s3(&config){
-			Ok(_) => {},
-			Err(e) => {
-				println!("Error: {}", e);
-				process::exit(1);
-			}
+    // Take inventory of what artifacts exist at endpoint
+    let inventory = match endpoint::process_s3(&endpoints[&args[2]]) {
+        Ok(o) => o,
+        Err(e) => {
+			println!("Error: {}", e);
+			process::exit(1);
 		}
-	}
+    };
+    println!("{:?}", inventory);
 }
