@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["Alexander von Gluck IV <kallisti5@unixzen.com>"]
 
 [dependencies]
+url = "*"
+futures = "*"
+hyper = "0.12"
 regex = "*"
 rusoto_core = "0.32.0"
 rusoto_s3 = "0.32.0"

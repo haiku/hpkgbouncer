@@ -15,9 +15,9 @@ use rusoto_credential::StaticProvider;
 use rusoto_core::reactor::RequestDispatcher;
 use rusoto_s3::{S3, S3Client, ListObjectsV2Request};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Endpoint {
-    pub public_url: Option<String>,
+    pub public_url: String,
     pub s3_endpoint: Option<String>,
     pub s3_bucket: Option<String>,
     pub s3_key: Option<String>,
