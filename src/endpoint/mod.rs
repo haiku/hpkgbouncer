@@ -54,18 +54,18 @@ pub fn from_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Endpoint>, B
 }
 
 pub fn process_s3(endpoint: &Endpoint) -> Result<Vec<Architecture>, Box<Error>> {
-	let s3_endpoint = match &endpoint.s3_endpoint {
-		Some(s) => s.to_string(),
-		None => {
-			return Err(From::from("s3_endpoint missing"));
-		}
-	};
-	let s3_bucket = match &endpoint.s3_bucket {
-		Some(s) => s.to_string(),
-		None => {
-			return Err(From::from("s3_bucket missing"));
-		}
-	};
+    let s3_endpoint = match &endpoint.s3_endpoint {
+        Some(s) => s.to_string(),
+        None => {
+            return Err(From::from("s3_endpoint missing"));
+        }
+    };
+    let s3_bucket = match &endpoint.s3_bucket {
+        Some(s) => s.to_string(),
+        None => {
+            return Err(From::from("s3_bucket missing"));
+        }
+    };
     let s3_key = match &endpoint.s3_key {
         Some(s) => s.to_string(),
         None => {
@@ -138,5 +138,5 @@ pub fn process_s3(endpoint: &Endpoint) -> Result<Vec<Architecture>, Box<Error>> 
             }
         }
     }
-	return Ok(architectures)
+    return Ok(architectures)
 }
