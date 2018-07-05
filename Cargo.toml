@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Alexander von Gluck IV <kallisti5@unixzen.com>"]
 
 [dependencies]
+regex = "*"
 rusoto_core = "0.32.0"
 rusoto_s3 = "0.32.0"
 rusoto_credential = "0.11.0"

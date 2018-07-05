@@ -1,10 +1,12 @@
 
 use toml;
 use std::fs::File;
-use std::path::{Path,PathBuf};
+use std::path::Path;
 use std::error::Error;
 use std::io::Read;
 use std::collections::HashMap;
+
+use regex::Regex;
 
 use rusoto_core::Region;
 use rusoto_credential::StaticProvider;
@@ -111,25 +113,30 @@ pub fn process_s3(endpoint: &Endpoint) -> Result<Vec<Architecture>, Box<Error>> 
         }
     }
 
-    println!("Architectures: {:?}", architectures);
-
-    for mut arch in architectures {
-        let mut request = ListObjectsV2Request { bucket: s3_bucket.clone(), prefix: Some(arch.prefix),
+    for ref mut arch in &mut architectures {
+        let mut request = ListObjectsV2Request { bucket: s3_bucket.clone(), prefix: Some(arch.prefix.clone()),
             ..Default::default() };
         loop {
             let result = s3_client.list_objects_v2(&request).sync()?;
             if !result.contents.is_some() {
                 break;
             }
-
             let objs = &result.contents.unwrap();
             let last_obj = &objs[&objs.len() - 1];
             request.start_after = last_obj.key.clone();
             for obj in objs {
                 if obj.key.is_some() {
                     let key = obj.clone().key.unwrap();
-                    let inventory = Inventory { name: key, version: None };
-                    if !arch.objects.contains(&inventory) {
+                    let file = key.trim_left_matches(&arch.prefix);
+                    let file_re = Regex::new(r"^.*(hrev\d+).*\.zip$")?;
+                    let path_re = Regex::new(r"^.*(hrev\d+)/$")?;
+                    if file_re.is_match(file) {
+                        let caps = file_re.captures(file).unwrap();
+                        let inventory = Inventory { name: file.clone().to_string(), version: Some(caps[1].to_string()) };
+                        arch.objects.push(inventory);
+                    } else if path_re.is_match(file) {
+                        let caps = path_re.captures(file).unwrap();
+                        let inventory = Inventory { name: file.clone().to_string(), version: Some(caps[1].to_string()) };
                         arch.objects.push(inventory);
                     }
                 } else {
@@ -138,5 +145,7 @@ pub fn process_s3(endpoint: &Endpoint) -> Result<Vec<Architecture>, Box<Error>> 
             }
         }
     }
+    println!("Architectures: {:?}", architectures);
+
     return Ok(architectures)
 }
