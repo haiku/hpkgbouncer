@@ -9,11 +9,19 @@ extern crate rusoto_credential;
 extern crate rusoto_s3;
 
 use std::process;
+use std::env;
 
 mod endpoint;
 
 fn main() {
-    let endpoints = match endpoint::from_file("config-sample.toml") {
+    let config_file = match env::args().nth(1) {
+        Some(c) => c,
+        None => {
+            println!("Usage: {} <config_toml>", env::args().nth(1).unwrap_or("hpkgserve".to_string()));
+            process::exit(1);
+        }
+    };
+    let endpoints = match endpoint::from_file(config_file) {
 		Ok(o) => o,
 		Err(e) => {
 			println!("Error: {}", e);
