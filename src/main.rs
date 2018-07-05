@@ -77,10 +77,16 @@ fn routes(req: Request<Body>) -> BoxFut {
             if !architectures.contains(&req_parts.first().unwrap().to_string()) {
                 *response.status_mut() = StatusCode::NOT_FOUND;
             } else {
-                let pub_uri = format!("{}/{}{}", &endpoint.public_url, &endpoint.s3_bucket.unwrap(), req.uri().path());
-                let url = Url::parse(&pub_uri).unwrap();
+                let base_pub_uri = format!("{}/{}", &endpoint.public_url, &endpoint.s3_bucket.unwrap());
+                let mut final_url = String::new();
+                if req_parts.last().unwrap() == &"current" {
+                    //final_url = format!("{}{}", base_pub_uri, inventory.latest.file);
+                    final_url = format!("{}/CATS", base_pub_uri);
+                } else {
+                    final_url = format!("{}{}", base_pub_uri, req_uri);
+                }
                 let mut headers = HeaderMap::new();
-                headers.insert(LOCATION, pub_uri.as_str().parse().unwrap());
+                headers.insert(LOCATION, final_url.as_str().parse().unwrap());
                 *response.headers_mut() = headers;
                 *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
             }
