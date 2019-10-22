@@ -50,7 +50,7 @@ impl PartialEq for Architecture {
     }
 }
 
-pub fn from_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Endpoint>, Box<Error>> {
+pub fn from_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Endpoint>, Box<dyn Error>> {
     let mut fh = File::open(path.as_ref())?;
     let mut buffer = String::new();
     fh.read_to_string(&mut buffer)?;
@@ -58,7 +58,7 @@ pub fn from_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Endpoint>, B
     return Ok(decoded);
 }
 
-pub fn process_s3(endpoint: &Endpoint) -> Result<Vec<Architecture>, Box<Error>> {
+pub fn process_s3(endpoint: &Endpoint) -> Result<Vec<Architecture>, Box<dyn Error>> {
     let bucket_prefix = match &endpoint.bucket_prefix {
         Some(s) => s.to_string(),
         None => "/".to_string(),

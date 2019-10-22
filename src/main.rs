@@ -19,13 +19,13 @@ use hyper::rt::Future;
 use hyper::service::service_fn;
 use hyper::header::{HeaderMap, LOCATION};
 
-use url::Url;
+//use url::Url;
 
-type BoxFut = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
+type BoxFut = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
 mod endpoint;
 
-fn get_config() -> Result<endpoint::Endpoint, Box<Error>> {
+fn get_config() -> Result<endpoint::Endpoint, Box<dyn Error>> {
     let args: Vec<_> = env::args().collect();
     let region = args[2].clone();
     let endpoints = match endpoint::from_file(args[1].clone()) {
@@ -102,6 +102,7 @@ fn main() {
         println!("Usage: {} <config_toml> <region>", args[0]);
         process::exit(1);
     }
+
 
     let addr = ([0, 0, 0, 0], 8080).into();
     let server = Server::bind(&addr)
