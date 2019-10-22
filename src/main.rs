@@ -5,10 +5,7 @@ extern crate hyper;
 extern crate toml;
 #[macro_use]
 extern crate serde_derive;
-
-extern crate rusoto_core;
-extern crate rusoto_credential;
-extern crate rusoto_s3;
+extern crate s3;
 
 extern crate url;
 
