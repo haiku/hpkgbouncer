@@ -28,21 +28,15 @@ mod endpoint;
 fn get_config() -> Result<endpoint::Endpoint, Box<dyn Error>> {
     let args: Vec<_> = env::args().collect();
     let region = args[2].clone();
-    let endpoints = match endpoint::from_file(args[1].clone()) {
-		Ok(o) => o,
-		Err(e) => {
-			println!("Error: {}", e);
-			process::exit(1);
-		}
-	};
+    let endpoints = endpoint::from_file(args[1].clone())?;
     if !endpoints.contains_key(&region) {
-        println!("Error: config_toml doesn't contain region {}", args[2]);
-        process::exit(1);
+        return Err(From::from(format!("config toml doesn't contain region {}", args[2])));
     }
+
     return Ok(endpoints[&region].clone());
 }
 
-fn routes(req: Request<Body>) -> BoxFut {
+fn router(req: Request<Body>) -> BoxFut {
     let mut response = Response::new(Body::empty());
 
     let endpoint = match get_config() {
@@ -103,10 +97,17 @@ fn main() {
         process::exit(1);
     }
 
+    let config = match (get_config()) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("Error: {}", e);
+            process::exit(1);
+        },
+    };
 
     let addr = ([0, 0, 0, 0], 8080).into();
     let server = Server::bind(&addr)
-        .serve(|| service_fn(routes))
+        .serve(|| service_fn(router))
         .map_err(|e| println!("server error: {}", e));
 
     hyper::rt::run(server);
