@@ -24,86 +24,72 @@ use hyper::header::{HeaderMap, LOCATION};
 type BoxFut = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
 mod endpoint;
-
-fn get_config() -> Result<endpoint::Endpoint, Box<dyn Error>> {
-    let args: Vec<_> = env::args().collect();
-    let region = args[2].clone();
-    let endpoints = endpoint::from_file(args[1].clone())?;
-    if !endpoints.contains_key(&region) {
-        return Err(From::from(format!("config toml doesn't contain region {}", args[2])));
-    }
-
-    return Ok(endpoints[&region].clone());
-}
+mod routecache;
 
 fn router(req: Request<Body>) -> BoxFut {
     let mut response = Response::new(Body::empty());
 
-    let endpoint = match get_config() {
-        Ok(o) => o,
-        Err(e) => {
-            println!("Error: {}", e);
-            process::exit(1);
-        }
-    };
-    let inventory = match endpoint::process_s3(&endpoint) {
-        Ok(o) => o,
-        Err(e) => {
-			println!("Error: {}", e);
-			process::exit(1);
-		}
-    };
-    let architectures: Vec<String> = inventory.iter()
-        .map(|i| i.prefix.clone().replace("/", ""))
-        .collect();
+    //let endpoint = match get_config() {
+    //    Ok(o) => o,
+    //    Err(e) => {
+    //        println!("Error: {}", e);
+    //        process::exit(1);
+    //    }
+    //};
+    //let inventory = match endpoint::process_s3(&endpoint) {
+    //    Ok(o) => o,
+    //    Err(e) => {
+	//		println!("Error: {}", e);
+	//		process::exit(1);
+	//	}
+    //};
+    //let architectures: Vec<String> = inventory.iter()
+    //    .map(|i| i.prefix.clone().replace("/", ""))
+    //    .collect();
 
-    match(req.method(), req.uri().path()) {
-        (&Method::GET, "/") => {
-            *response.body_mut() = Body::from(architectures.join("<br/>"));
-        }
+    //match(req.method(), req.uri().path()) {
+    //    (&Method::GET, "/") => {
+    //        *response.body_mut() = Body::from(architectures.join("<br/>"));
+    //    }
 
-        (&Method::GET, _) => {
-            let req_uri = req.uri().path().to_string();
-            let req_parts: Vec<&str> = req_uri.split("/").filter(|v| v != &"").collect();
-            if !architectures.contains(&req_parts.first().unwrap().to_string()) {
-                *response.status_mut() = StatusCode::NOT_FOUND;
-            } else {
-                let base_pub_uri = format!("{}/{}", &endpoint.public_url, &endpoint.s3_bucket.unwrap());
-                let mut final_url = String::new();
-                if req_parts.last().unwrap() == &"current" {
-                    //final_url = format!("{}{}", base_pub_uri, inventory.latest.file);
-                    final_url = format!("{}/CATS", base_pub_uri);
-                } else {
-                    final_url = format!("{}{}", base_pub_uri, req_uri);
-                }
-                let mut headers = HeaderMap::new();
-                headers.insert(LOCATION, final_url.as_str().parse().unwrap());
-                *response.headers_mut() = headers;
-                *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
-            }
-        }
+    //    (&Method::GET, _) => {
+    //        let req_uri = req.uri().path().to_string();
+    //        let req_parts: Vec<&str> = req_uri.split("/").filter(|v| v != &"").collect();
+    //        if !architectures.contains(&req_parts.first().unwrap().to_string()) {
+    //            *response.status_mut() = StatusCode::NOT_FOUND;
+    //        } else {
+    //            let base_pub_uri = format!("{}/{}", &endpoint.public_url, &endpoint.s3_bucket.unwrap());
+    //            let mut final_url = String::new();
+    //            if req_parts.last().unwrap() == &"current" {
+    //                //final_url = format!("{}{}", base_pub_uri, inventory.latest.file);
+    //                final_url = format!("{}/CATS", base_pub_uri);
+    //            } else {
+    //                final_url = format!("{}{}", base_pub_uri, req_uri);
+    //            }
+    //            let mut headers = HeaderMap::new();
+    //            headers.insert(LOCATION, final_url.as_str().parse().unwrap());
+    //            *response.headers_mut() = headers;
+    //            *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
+    //        }
+    //    }
 
-        _ => {
-            *response.status_mut() = StatusCode::NOT_FOUND;
-        }
-    };
+    //    _ => {
+    //        *response.status_mut() = StatusCode::NOT_FOUND;
+    //    }
+    //};
     Box::new(future::ok(response))
 }
 
 fn main() {
-    let args: Vec<_> = env::args().collect();
-    if args.len() < 3 {
-        println!("Usage: {} <config_toml> <region>", args[0]);
-        process::exit(1);
-    }
-
-    let config = match (get_config()) {
+    let config = match (routecache::RouteConfig::new_from_env()) {
         Ok(c) => c,
         Err(e) => {
             println!("Error: {}", e);
             process::exit(1);
         },
     };
+    let mut cache = routecache::RouteCache::new(config);
+    cache.sync();
 
     let addr = ([0, 0, 0, 0], 8080).into();
     let server = Server::bind(&addr)
