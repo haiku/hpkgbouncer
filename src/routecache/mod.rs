@@ -77,7 +77,7 @@ impl RouteConfig {
         };
         config.s3_prefix = match env::var("S3_PREFIX") {
             Ok(v) => Some(v),
-            Err(_) => Some("/".to_string()),
+            Err(_) => Some("".to_string()),
         };
 
         // Required
