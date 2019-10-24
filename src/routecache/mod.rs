@@ -158,4 +158,18 @@ impl RouteCache {
         self.last_update = Some(Instant::now());
         return Ok(0);
     }
+
+    pub fn latest_version(&mut self, branch: String, arch: String) {
+        self.sync();
+        let mut potential_routes: Vec<Route> = Vec::new();
+        for route in self.routes.iter() {
+            if route.branch == branch && route.arch == arch {
+                potential_routes.push(route.clone());
+            }
+        }
+        println!("I found these versions for {} {}:", branch, arch);
+        for i in potential_routes {
+            println!("{:?}", i);
+        }
+    }
 }

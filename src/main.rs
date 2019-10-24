@@ -89,6 +89,8 @@ fn main() {
     };
     let mut cache = routecache::RouteCache::new(config);
     cache.sync();
+    // XXX: Testing
+    cache.latest_version("master".to_string(), "x86_64".to_string());
 
     let addr = ([0, 0, 0, 0], 8080).into();
     let server = Server::bind(&addr)
