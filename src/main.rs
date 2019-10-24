@@ -10,7 +10,6 @@ extern crate s3;
 extern crate url;
 
 use std::process;
-use std::env;
 use std::error::Error;
 
 use futures::future;
@@ -89,8 +88,10 @@ fn main() {
     };
     let mut cache = routecache::RouteCache::new(config);
     cache.sync();
+
     // XXX: Testing
-    cache.latest_version("master".to_string(), "x86_64".to_string());
+    let latest = cache.latest_version("master".to_string(), "x86_64".to_string());
+    println!("Latest version of master/x86_64: {:?}", latest.unwrap());
 
     let addr = ([0, 0, 0, 0], 8080).into();
     let server = Server::bind(&addr)

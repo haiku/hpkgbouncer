@@ -4,11 +4,11 @@ use std::error::Error;
 use std::time::{Duration, Instant};
 use std::fs::File;
 use std::path::Path;
+use std::cmp::Ordering;
 
 use s3::bucket::Bucket;
 use s3::region::Region;
 use s3::credentials::Credentials;
-use s3::error::S3Error;
 
 #[derive(Clone, Debug)]
 pub struct RouteConfig {
@@ -21,7 +21,7 @@ pub struct RouteConfig {
     pub s3_prefix: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 pub struct Route {
     pub branch: String,
     pub arch: String,
@@ -47,6 +47,18 @@ impl PartialEq for Route {
             return false;
         }
         return true;
+    }
+}
+
+impl PartialOrd for Route {
+    fn partial_cmp(&self, other: &Route) -> Option<Ordering> {
+        Some(self.version.cmp(&other.version))
+    }
+}
+
+impl Ord for Route {
+    fn cmp(&self, other: &Route) -> Ordering {
+        self.version.cmp(&other.version)
     }
 }
 
@@ -159,7 +171,7 @@ impl RouteCache {
         return Ok(0);
     }
 
-    pub fn latest_version(&mut self, branch: String, arch: String) {
+    pub fn latest_version(&mut self, branch: String, arch: String) -> Option<Route> {
         self.sync();
         let mut potential_routes: Vec<Route> = Vec::new();
         for route in self.routes.iter() {
@@ -167,9 +179,11 @@ impl RouteCache {
                 potential_routes.push(route.clone());
             }
         }
-        println!("I found these versions for {} {}:", branch, arch);
-        for i in potential_routes {
-            println!("{:?}", i);
-        }
+        potential_routes.sort();
+        //println!("I found these versions for {} {}:", branch, arch);
+        //for i in potential_routes {
+        //    println!("{:?}", i);
+        //}
+        return potential_routes.pop();
     }
 }
