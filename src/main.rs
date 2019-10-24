@@ -23,7 +23,6 @@ use hyper::header::{HeaderMap, LOCATION};
 
 type BoxFut = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
-mod endpoint;
 mod routecache;
 
 fn router(req: Request<Body>) -> BoxFut {
@@ -81,7 +80,7 @@ fn router(req: Request<Body>) -> BoxFut {
 }
 
 fn main() {
-    let config = match (routecache::RouteConfig::new_from_env()) {
+    let config = match routecache::RouteConfig::new_from_env() {
         Ok(c) => c,
         Err(e) => {
             println!("Error: {}", e);

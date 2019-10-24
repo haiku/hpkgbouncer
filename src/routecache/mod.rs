@@ -25,7 +25,7 @@ pub struct RouteConfig {
 pub struct Route {
     pub branch: String,
     pub arch: String,
-    pub latest_version: String,
+    pub version: String,
 }
 
 #[derive(Clone, Debug)]
@@ -33,6 +33,21 @@ pub struct RouteCache {
     pub last_update: Option<Instant>,
     pub routes: Vec<Route>,
     pub config: RouteConfig,
+}
+
+impl PartialEq for Route {
+    fn eq(&self, other: &Route) -> bool {
+        if self.branch != other.branch {
+            return false;
+        }
+        if self.arch != other.arch {
+            return false;
+        }
+        if self.version != other.version {
+            return false;
+        }
+        return true;
+    }
 }
 
 impl RouteConfig {
@@ -114,11 +129,32 @@ impl RouteCache {
         let bucket = Bucket::new(&config.s3_bucket.unwrap(), region, credentials)?;
 
         //let mut architectures: Vec<Architecture> = Vec::new();
-        let results = bucket.list_all(config.s3_prefix.unwrap(), Some("/".to_string()))?;
+        let base_prefix = config.s3_prefix.unwrap().clone();
+        let results = bucket.list(&base_prefix, None)?;
+        let mut routes: Vec<Route> = Vec::new();
         for (list, code) in results {
-            println!("{:?}", list);
+            for object in list.contents {
+                let mut fields = object.key.split("/");
+                let branch = match fields.next() {
+                    Some(b) => b.to_string(),
+                    None => continue,
+                };
+                let arch = match fields.next() {
+                    Some(a) => a.to_string(),
+                    None => continue,
+                };
+                let version = match fields.next() {
+                    Some(v) => v.to_string(),
+                    None => continue,
+                };
+                let route = Route{branch: branch, arch: arch, version: version};
+                if !routes.contains(&route) {
+                    routes.push(route);
+                }
+            }
         }
-
+        println!("RouteCache/Sync: Complete. {} resources located.", routes.len());
+        self.routes = routes;
         self.last_update = Some(Instant::now());
         return Ok(0);
     }

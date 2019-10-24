@@ -98,7 +98,9 @@ pub fn process_s3(endpoint: &Endpoint) -> Result<Vec<Architecture>, Box<dyn Erro
     let bucket = Bucket::new(&s3_bucket, region, credentials)?;
 
     let mut architectures: Vec<Architecture> = Vec::new();
+    println!("LISTALL!");
     let results = bucket.list_all(bucket_prefix, Some("/".to_string())).unwrap();
+    println!("LISTALL!");
     for (list, code) in results {
         println!("{:?}", list);
     }
