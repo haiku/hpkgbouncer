@@ -90,13 +90,13 @@ fn main() {
     cache.sync();
 
     // XXX: Testing
-    let latest = cache.latest_version("master".to_string(), "x86_64".to_string());
-    println!("Latest version of master/x86_64: {:?}", latest.unwrap());
+    let latest = cache.latest_version("master".to_string(), "x86_64".to_string()).unwrap();
 
     let addr = ([0, 0, 0, 0], 8080).into();
     let server = Server::bind(&addr)
         .serve(|| service_fn(router))
         .map_err(|e| println!("server error: {}", e));
 
+    println!("Server ready! Listening on 0.0.0.0:8080 for requests!");
     hyper::rt::run(server);
 }

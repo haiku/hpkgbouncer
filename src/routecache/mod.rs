@@ -142,7 +142,7 @@ impl RouteCache {
 
         //let mut architectures: Vec<Architecture> = Vec::new();
         let base_prefix = config.s3_prefix.unwrap().clone();
-        let results = bucket.list(&base_prefix, None)?;
+        let results = bucket.list_all(base_prefix, None)?;
         let mut routes: Vec<Route> = Vec::new();
         for (list, code) in results {
             for object in list.contents {
