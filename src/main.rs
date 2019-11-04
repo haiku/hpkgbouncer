@@ -89,17 +89,45 @@ fn main() {
     let mut cache = routecache::RouteCache::new(config);
     cache.sync();
 
-    // XXX: Testing
-    let latest = cache.latest_version("master".to_string(), "x86_64".to_string()).unwrap();
-
     let port = env::var("LISTEN_PORT")
         .unwrap_or_else(|_| "8080".to_string())
         .parse()
         .expect("LISTEN_PORT must be a number)");
-
     let addr = ([0, 0, 0, 0], port).into();
+
+    let router_service = move || {
+        let mut service_cache = cache.clone();
+        service_fn(move |mut req| {
+            service_cache.sync();
+            let mut response = Response::new(Body::empty());
+            let branches = service_cache.branches();
+            match(req.method(), req.uri().path()) {
+                (&Method::GET, "/") => {
+                    *response.body_mut() = Body::from(format!("{:?}", branches));
+                }
+
+                (&Method::GET, _) => {
+                    let req_uri = req.uri().path().to_string();
+                    let req_parts: Vec<&str> = req_uri.split("/").filter(|v| v != &"").collect();
+                    let branch = &req_parts.first().unwrap().to_string();
+                    if !branches.contains(branch) {
+                        *response.status_mut() = StatusCode::NOT_FOUND;
+                    } else {
+                        let latest = service_cache.latest_version(branch.to_string(), "x86_64".to_string()).unwrap();
+                        *response.body_mut() = Body::from(format!("{:?}", latest));
+                    }
+                }
+
+                _ => {
+                    *response.status_mut() = StatusCode::NOT_FOUND;
+                }
+            };
+            Box::new(future::ok::<_, hyper::Error>(response))
+        })
+    };
+
     let server = Server::bind(&addr)
-        .serve(|| service_fn(router))
+        .serve(router_service)
         .map_err(|e| println!("server error: {}", e));
 
     println!("Server ready! Listening on 0.0.0.0:{} for requests!", port);

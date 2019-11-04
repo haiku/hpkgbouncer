@@ -186,4 +186,15 @@ impl RouteCache {
         //}
         return potential_routes.pop();
     }
+
+    pub fn branches(&mut self) -> Vec<String> {
+        self.sync();
+        let mut branches: Vec<String> = Vec::new();
+        for route in self.routes.iter() {
+            if !branches.contains(&route.branch) {
+                branches.push(route.branch.clone());
+            }
+        }
+        branches
+    }
 }
