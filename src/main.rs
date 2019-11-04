@@ -9,7 +9,7 @@ extern crate s3;
 
 extern crate url;
 
-use std::process;
+use std::{env, process};
 use std::error::Error;
 
 use futures::future;
@@ -92,11 +92,16 @@ fn main() {
     // XXX: Testing
     let latest = cache.latest_version("master".to_string(), "x86_64".to_string()).unwrap();
 
-    let addr = ([0, 0, 0, 0], 8080).into();
+    let port = env::var("LISTEN_PORT")
+        .unwrap_or_else(|_| "8080".to_string())
+        .parse()
+        .expect("LISTEN_PORT must be a number)");
+
+    let addr = ([0, 0, 0, 0], port).into();
     let server = Server::bind(&addr)
         .serve(|| service_fn(router))
         .map_err(|e| println!("server error: {}", e));
 
-    println!("Server ready! Listening on 0.0.0.0:8080 for requests!");
+    println!("Server ready! Listening on 0.0.0.0:{} for requests!", port);
     hyper::rt::run(server);
 }
