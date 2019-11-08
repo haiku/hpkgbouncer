@@ -197,4 +197,15 @@ impl RouteCache {
         }
         branches
     }
+
+    pub fn architectures(&mut self) -> Vec<String> {
+        self.sync();
+        let mut arches: Vec<String> = Vec::new();
+        for route in self.routes.iter() {
+            if !arches.contains(&route.arch) {
+                arches.push(route.arch.clone());
+            }
+        }
+        arches
+    }
 }

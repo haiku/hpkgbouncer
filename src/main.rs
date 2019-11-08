@@ -29,15 +29,8 @@ mod routecache;
 fn index(cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> String {
     let mut cache = cachedb.lock().unwrap();
     cache.sync();
-
-    // let mut headers = HeaderMap::new();
-    // headers.insert(LOCATION, final_url.as_str().parse().unwrap());
-    // *response.headers_mut() = headers;
-    // *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
-
-    // TODO: Dump all known branches
-    let latest = cache.latest_version("master".to_string(), "x86_64".to_string()).unwrap();
-    format!("{:?}", latest).to_string()
+    let branches = cache.branches();
+    format!("{:?}", branches).to_string()
 }
 
 #[get("/<branch>")]
@@ -45,14 +38,9 @@ fn index_branch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: Stri
     let mut cache = cachedb.lock().unwrap();
     cache.sync();
 
-    // let mut headers = HeaderMap::new();
-    // headers.insert(LOCATION, final_url.as_str().parse().unwrap());
-    // *response.headers_mut() = headers;
-    // *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
-
-    // TODO: Dump all known architectures
-    let latest = cache.latest_version(branch, "x86_64".to_string()).unwrap();
-    format!("{:?}", latest).to_string()
+    // TODO: Only architectures for chosen branch!
+    let arches = cache.architectures();
+    format!("{:?}", arches).to_string()
 }
 
 #[get("/<branch>/<arch>")]
