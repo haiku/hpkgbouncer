@@ -6,7 +6,7 @@ authors = ["Alexander von Gluck IV <kallisti5@unixzen.com>"]
 [dependencies]
 url = "*"
 futures = "*"
-hyper = "0.12"
+rocket = "0.4.2"
 regex = "*"
 rust-s3 = "0.18.3"
 toml = "0.4"

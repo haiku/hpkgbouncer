@@ -1,6 +1,10 @@
+#![feature(proc_macro_hygiene, decl_macro)]
+
 extern crate regex;
 extern crate futures;
-extern crate hyper;
+
+#[macro_use]
+extern crate rocket;
 
 extern crate toml;
 #[macro_use]
@@ -9,73 +13,77 @@ extern crate s3;
 
 extern crate url;
 
+use std::sync::{Arc,Mutex};
 use std::{env, process};
 use std::error::Error;
 
 use futures::future;
-use hyper::{Body, Method, Response, Request, Server, StatusCode};
-use hyper::rt::Future;
-use hyper::service::service_fn;
-use hyper::header::{HeaderMap, LOCATION};
+use rocket::State;
+use rocket::response::Redirect;
 
 //use url::Url;
 
-type BoxFut = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send>;
-
 mod routecache;
 
-fn router(req: Request<Body>) -> BoxFut {
-    let mut response = Response::new(Body::empty());
+#[get("/")]
+fn index(cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> String {
+    let mut cache = cachedb.lock().unwrap();
+    cache.sync();
 
-    //let endpoint = match get_config() {
-    //    Ok(o) => o,
-    //    Err(e) => {
-    //        println!("Error: {}", e);
-    //        process::exit(1);
-    //    }
-    //};
-    //let inventory = match endpoint::process_s3(&endpoint) {
-    //    Ok(o) => o,
-    //    Err(e) => {
-	//		println!("Error: {}", e);
-	//		process::exit(1);
-	//	}
-    //};
-    //let architectures: Vec<String> = inventory.iter()
-    //    .map(|i| i.prefix.clone().replace("/", ""))
-    //    .collect();
+    // let mut headers = HeaderMap::new();
+    // headers.insert(LOCATION, final_url.as_str().parse().unwrap());
+    // *response.headers_mut() = headers;
+    // *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
 
-    //match(req.method(), req.uri().path()) {
-    //    (&Method::GET, "/") => {
-    //        *response.body_mut() = Body::from(architectures.join("<br/>"));
-    //    }
+    // TODO: Dump all known branches
+    let latest = cache.latest_version("master".to_string(), "x86_64".to_string()).unwrap();
+    format!("{:?}", latest).to_string()
+}
 
-    //    (&Method::GET, _) => {
-    //        let req_uri = req.uri().path().to_string();
-    //        let req_parts: Vec<&str> = req_uri.split("/").filter(|v| v != &"").collect();
-    //        if !architectures.contains(&req_parts.first().unwrap().to_string()) {
-    //            *response.status_mut() = StatusCode::NOT_FOUND;
-    //        } else {
-    //            let base_pub_uri = format!("{}/{}", &endpoint.public_url, &endpoint.s3_bucket.unwrap());
-    //            let mut final_url = String::new();
-    //            if req_parts.last().unwrap() == &"current" {
-    //                //final_url = format!("{}{}", base_pub_uri, inventory.latest.file);
-    //                final_url = format!("{}/CATS", base_pub_uri);
-    //            } else {
-    //                final_url = format!("{}{}", base_pub_uri, req_uri);
-    //            }
-    //            let mut headers = HeaderMap::new();
-    //            headers.insert(LOCATION, final_url.as_str().parse().unwrap());
-    //            *response.headers_mut() = headers;
-    //            *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
-    //        }
-    //    }
+#[get("/<branch>")]
+fn index_branch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String) -> String {
+    let mut cache = cachedb.lock().unwrap();
+    cache.sync();
 
-    //    _ => {
-    //        *response.status_mut() = StatusCode::NOT_FOUND;
-    //    }
-    //};
-    Box::new(future::ok(response))
+    // let mut headers = HeaderMap::new();
+    // headers.insert(LOCATION, final_url.as_str().parse().unwrap());
+    // *response.headers_mut() = headers;
+    // *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
+
+    // TODO: Dump all known architectures
+    let latest = cache.latest_version(branch, "x86_64".to_string()).unwrap();
+    format!("{:?}", latest).to_string()
+}
+
+#[get("/<branch>/<arch>")]
+fn index_arch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String) -> String {
+    let mut cache = cachedb.lock().unwrap();
+    cache.sync();
+
+    // let mut headers = HeaderMap::new();
+    // headers.insert(LOCATION, final_url.as_str().parse().unwrap());
+    // *response.headers_mut() = headers;
+    // *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
+
+    // TODO: Dump all known architectures
+    let latest = cache.latest_version(branch, arch).unwrap();
+    format!("{:?}", latest).to_string()
+}
+
+#[get("/<branch>/<arch>/current")]
+fn index_current(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String) -> Redirect {
+    let mut cache = cachedb.lock().unwrap();
+    cache.sync();
+
+    // let mut headers = HeaderMap::new();
+    // headers.insert(LOCATION, final_url.as_str().parse().unwrap());
+    // *response.headers_mut() = headers;
+    // *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
+
+    // TODO: Dump all known architectures
+    let latest = cache.latest_version(branch, arch).unwrap();
+    //format!("{:?}", latest).to_string()
+    Redirect::to(format!("https://google.com/"))
 }
 
 fn main() {
@@ -87,49 +95,43 @@ fn main() {
         },
     };
     let mut cache = routecache::RouteCache::new(config);
-    cache.sync();
-
-    let port = env::var("LISTEN_PORT")
-        .unwrap_or_else(|_| "8080".to_string())
-        .parse()
-        .expect("LISTEN_PORT must be a number)");
-    let addr = ([0, 0, 0, 0], port).into();
-
-    let router_service = move || {
-        let mut service_cache = cache.clone();
-        service_fn(move |mut req| {
-            service_cache.sync();
-            let mut response = Response::new(Body::empty());
-            let branches = service_cache.branches();
-            match(req.method(), req.uri().path()) {
-                (&Method::GET, "/") => {
-                    *response.body_mut() = Body::from(format!("{:?}", branches));
-                }
-
-                (&Method::GET, _) => {
-                    let req_uri = req.uri().path().to_string();
-                    let req_parts: Vec<&str> = req_uri.split("/").filter(|v| v != &"").collect();
-                    let branch = &req_parts.first().unwrap().to_string();
-                    if !branches.contains(branch) {
-                        *response.status_mut() = StatusCode::NOT_FOUND;
-                    } else {
-                        let latest = service_cache.latest_version(branch.to_string(), "x86_64".to_string()).unwrap();
-                        *response.body_mut() = Body::from(format!("{:?}", latest));
-                    }
-                }
-
-                _ => {
-                    *response.status_mut() = StatusCode::NOT_FOUND;
-                }
-            };
-            Box::new(future::ok::<_, hyper::Error>(response))
-        })
+    match cache.sync() {
+        Ok(_) => {},
+        Err(e) => println!("Cache Sync Error: {}", e),
     };
 
-    let server = Server::bind(&addr)
-        .serve(router_service)
-        .map_err(|e| println!("server error: {}", e));
+    rocket::ignite()
+        .manage(Arc::new(Mutex::new(cache)))
+        .mount("/", routes![index, index_branch, index_arch, index_current])
+        .launch();
 
-    println!("Server ready! Listening on 0.0.0.0:{} for requests!", port);
-    hyper::rt::run(server);
+    //let router_service = move || {
+    //    let mut service_cache = cache.clone();
+    //    service_fn(move |mut req| {
+    //        let mut response = Response::new(Body::empty());
+    //        let branches = service_cache.branches();
+    //        match(req.method(), req.uri().path()) {
+    //            (&Method::GET, "/") => {
+    //                *response.body_mut() = Body::from(format!("{:?}", branches));
+    //            }
+
+    //            (&Method::GET, _) => {
+    //                let req_uri = req.uri().path().to_string();
+    //                let req_parts: Vec<&str> = req_uri.split("/").filter(|v| v != &"").collect();
+    //                let branch = &req_parts.first().unwrap().to_string();
+    //                if !branches.contains(branch) {
+    //                    *response.status_mut() = StatusCode::NOT_FOUND;
+    //                } else {
+    //                    let latest = service_cache.latest_version(branch.to_string(), "x86_64".to_string()).unwrap();
+    //                    *response.body_mut() = Body::from(format!("{:?}", latest));
+    //                }
+    //            }
+
+    //            _ => {
+    //                *response.status_mut() = StatusCode::NOT_FOUND;
+    //            }
+    //        };
+    //        Box::new(future::ok::<_, hyper::Error>(response))
+    //    })
+    //};
 }
