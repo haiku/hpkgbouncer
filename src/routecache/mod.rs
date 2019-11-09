@@ -6,12 +6,15 @@ use std::fs::File;
 use std::path::Path;
 use std::cmp::Ordering;
 
+use url::Url;
+
 use s3::bucket::Bucket;
 use s3::region::Region;
 use s3::credentials::Credentials;
 
 #[derive(Clone, Debug)]
 pub struct RouteConfig {
+    pub s3_public: Option<String>,
     pub cache_ttl: u64,
     pub s3_region: Option<String>,
     pub s3_endpoint: Option<String>,
@@ -65,6 +68,7 @@ impl Ord for Route {
 impl RouteConfig {
     pub fn new() -> RouteConfig {
         RouteConfig {
+            s3_public: None,
             cache_ttl: 30,
             s3_region: None,
             s3_endpoint: None,
@@ -90,6 +94,10 @@ impl RouteConfig {
         config.s3_prefix = match env::var("S3_PREFIX") {
             Ok(v) => Some(v),
             Err(_) => Some("".to_string()),
+        };
+        config.s3_public = match env::var("S3_PUBLIC") {
+            Ok(v) => Some(v),
+            Err(_) => None
         };
 
         // Required
@@ -171,8 +179,18 @@ impl RouteCache {
         return Ok(0);
     }
 
+    pub fn public_prefix(&mut self) -> Result<Url, Box<dyn Error>> {
+        let mut base = String::new();
+        if self.config.s3_public != None {
+            base = self.config.s3_public.clone().unwrap();
+        } else {
+            base = format!("https://{}/{}/", self.config.s3_endpoint.clone().unwrap(),
+                self.config.s3_bucket.clone().unwrap());
+        }
+        Ok(Url::parse(&base)?)
+    }
+
     pub fn latest_version(&mut self, branch: String, arch: String) -> Option<Route> {
-        self.sync();
         let mut potential_routes: Vec<Route> = Vec::new();
         for route in self.routes.iter() {
             if route.branch == branch && route.arch == arch {
@@ -180,15 +198,10 @@ impl RouteCache {
             }
         }
         potential_routes.sort();
-        //println!("I found these versions for {} {}:", branch, arch);
-        //for i in potential_routes {
-        //    println!("{:?}", i);
-        //}
         return potential_routes.pop();
     }
 
     pub fn branches(&mut self) -> Vec<String> {
-        self.sync();
         let mut branches: Vec<String> = Vec::new();
         for route in self.routes.iter() {
             if !branches.contains(&route.branch) {
@@ -198,14 +211,29 @@ impl RouteCache {
         branches
     }
 
-    pub fn architectures(&mut self) -> Vec<String> {
-        self.sync();
+    pub fn architectures(&mut self, branch: String) -> Vec<String> {
         let mut arches: Vec<String> = Vec::new();
         for route in self.routes.iter() {
+            if route.branch != branch {
+                continue;
+            }
             if !arches.contains(&route.arch) {
                 arches.push(route.arch.clone());
             }
         }
         arches
+    }
+
+    pub fn versions(&mut self, branch: String, arch: String) -> Vec<String> {
+        let mut versions: Vec<String> = Vec::new();
+        for route in self.routes.iter() {
+            if route.branch != branch || route.arch != arch {
+                continue;
+            }
+            if !versions.contains(&route.arch) {
+                versions.push(route.version.clone());
+            }
+        }
+        versions
     }
 }

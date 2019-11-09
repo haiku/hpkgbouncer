@@ -16,14 +16,26 @@ extern crate url;
 use std::sync::{Arc,Mutex};
 use std::{env, process};
 use std::error::Error;
+use std::path::PathBuf;
 
 use futures::future;
 use rocket::State;
-use rocket::response::Redirect;
+use rocket::response::{Response, Redirect};
+use rocket::request::Request;
 
 //use url::Url;
 
 mod routecache;
+
+#[catch(404)]
+fn sys_not_found(req: &Request) -> String {
+    format!("Sorry, that's not a valid path!")
+}
+
+#[get("/healthz")]
+fn sys_health(cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> String {
+    format!("{{\"status\": \"OK\"}}").to_string()
+}
 
 #[get("/")]
 fn index(cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> String {
@@ -38,8 +50,7 @@ fn index_branch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: Stri
     let mut cache = cachedb.lock().unwrap();
     cache.sync();
 
-    // TODO: Only architectures for chosen branch!
-    let arches = cache.architectures();
+    let arches = cache.architectures(branch);
     format!("{:?}", arches).to_string()
 }
 
@@ -53,25 +64,21 @@ fn index_arch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String
     // *response.headers_mut() = headers;
     // *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
 
-    // TODO: Dump all known architectures
-    let latest = cache.latest_version(branch, arch).unwrap();
-    format!("{:?}", latest).to_string()
+    // TODO: Dump all known versions
+    let versions = cache.versions(branch, arch);
+    format!("{:?}", versions).to_string()
 }
 
-#[get("/<branch>/<arch>/current")]
-fn index_current(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String) -> Redirect {
+#[get("/<branch>/<arch>/current/<path..>")]
+fn index_current(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String, path: PathBuf) -> Redirect {
     let mut cache = cachedb.lock().unwrap();
     cache.sync();
 
-    // let mut headers = HeaderMap::new();
-    // headers.insert(LOCATION, final_url.as_str().parse().unwrap());
-    // *response.headers_mut() = headers;
-    // *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
-
-    // TODO: Dump all known architectures
-    let latest = cache.latest_version(branch, arch).unwrap();
-    //format!("{:?}", latest).to_string()
-    Redirect::to(format!("https://google.com/"))
+    let prefix_url = cache.public_prefix().unwrap();
+    let latest = cache.latest_version(branch.clone(), arch.clone()).unwrap();
+    let repo_file = path.to_str().unwrap();
+    let final_url = prefix_url.join(format!("{}/{}/{}/{}", branch, arch, latest.version, repo_file).as_str()).unwrap();
+    Redirect::to(final_url.to_string())
 }
 
 fn main() {
@@ -90,7 +97,8 @@ fn main() {
 
     rocket::ignite()
         .manage(Arc::new(Mutex::new(cache)))
-        .mount("/", routes![index, index_branch, index_arch, index_current])
+        .mount("/", routes![sys_health, index, index_branch, index_arch, index_current])
+        .register(catchers![sys_not_found])
         .launch();
 
     //let router_service = move || {
