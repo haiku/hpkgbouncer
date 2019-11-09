@@ -186,6 +186,9 @@ impl RouteCache {
         } else {
             base = format!("https://{}/{}/", self.config.s3_endpoint.clone().unwrap(),
                 self.config.s3_bucket.clone().unwrap());
+            if self.config.s3_prefix != None {
+                base.push_str(format!("{}/", self.config.s3_prefix.clone().unwrap()).as_str());
+            }
         }
         Ok(Url::parse(&base)?)
     }

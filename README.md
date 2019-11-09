@@ -5,7 +5,6 @@
 # Config
 
 **Required:**
-  * PUBLIC_URL
   * S3_ENDPOINT
   * S3_BUCKET
   * S3_KEY
@@ -15,6 +14,7 @@
   * CACHE_TTL - How often to scan s3 buckets for latest versions (default 30)
   * S3_REGION - Bucket region (default "us-east-1")
   * S3_PREFIX - Prefix within bucket to repos with no leading / (default "", ex: "myrepos/")
+  * PUBLIC_URL - Public URL of object storage. (default: https + S3_ENDPOINT + S3_BUCKET)
 
 # Bucket Format
 A common bucket data format is assumed inline with Haiku's standard needs:

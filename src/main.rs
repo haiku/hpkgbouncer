@@ -23,8 +23,6 @@ use rocket::State;
 use rocket::response::{Response, Redirect};
 use rocket::request::Request;
 
-//use url::Url;
-
 mod routecache;
 
 #[catch(404)]
@@ -49,7 +47,6 @@ fn index(cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> String {
 fn index_branch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String) -> String {
     let mut cache = cachedb.lock().unwrap();
     cache.sync();
-
     let arches = cache.architectures(branch);
     format!("{:?}", arches).to_string()
 }
@@ -58,13 +55,6 @@ fn index_branch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: Stri
 fn index_arch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String) -> String {
     let mut cache = cachedb.lock().unwrap();
     cache.sync();
-
-    // let mut headers = HeaderMap::new();
-    // headers.insert(LOCATION, final_url.as_str().parse().unwrap());
-    // *response.headers_mut() = headers;
-    // *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
-
-    // TODO: Dump all known versions
     let versions = cache.versions(branch, arch);
     format!("{:?}", versions).to_string()
 }
@@ -100,34 +90,4 @@ fn main() {
         .mount("/", routes![sys_health, index, index_branch, index_arch, index_current])
         .register(catchers![sys_not_found])
         .launch();
-
-    //let router_service = move || {
-    //    let mut service_cache = cache.clone();
-    //    service_fn(move |mut req| {
-    //        let mut response = Response::new(Body::empty());
-    //        let branches = service_cache.branches();
-    //        match(req.method(), req.uri().path()) {
-    //            (&Method::GET, "/") => {
-    //                *response.body_mut() = Body::from(format!("{:?}", branches));
-    //            }
-
-    //            (&Method::GET, _) => {
-    //                let req_uri = req.uri().path().to_string();
-    //                let req_parts: Vec<&str> = req_uri.split("/").filter(|v| v != &"").collect();
-    //                let branch = &req_parts.first().unwrap().to_string();
-    //                if !branches.contains(branch) {
-    //                    *response.status_mut() = StatusCode::NOT_FOUND;
-    //                } else {
-    //                    let latest = service_cache.latest_version(branch.to_string(), "x86_64".to_string()).unwrap();
-    //                    *response.body_mut() = Body::from(format!("{:?}", latest));
-    //                }
-    //            }
-
-    //            _ => {
-    //                *response.status_mut() = StatusCode::NOT_FOUND;
-    //            }
-    //        };
-    //        Box::new(future::ok::<_, hyper::Error>(response))
-    //    })
-    //};
 }
