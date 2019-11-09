@@ -1,9 +1,7 @@
 use std::env;
 
 use std::error::Error;
-use std::time::{Duration, Instant};
-use std::fs::File;
-use std::path::Path;
+use std::time::Instant;
 use std::cmp::Ordering;
 
 use url::Url;
@@ -153,7 +151,7 @@ impl RouteCache {
         let base_prefix = config.s3_prefix.unwrap().clone();
         let results = bucket.list_all(base_prefix, None)?;
         let mut routes: Vec<Route> = Vec::new();
-        for (list, code) in results {
+        for (list, _code) in results {
             for object in list.contents {
                 let mut fields = object.key.split("/");
                 let branch = match fields.next() {

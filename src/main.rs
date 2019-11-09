@@ -1,24 +1,20 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
 extern crate regex;
-extern crate futures;
 
 #[macro_use]
 extern crate rocket;
 
 extern crate toml;
-#[macro_use]
-extern crate serde_derive;
 extern crate s3;
 
 extern crate url;
 
 use std::sync::{Arc,Mutex};
-use std::{env, process};
-use std::error::Error;
+use std::{process};
+//use std::error::Error;
 use std::path::PathBuf;
 
-use futures::future;
 use rocket::State;
 use rocket::response::{Response, Redirect};
 use rocket::request::Request;
@@ -26,12 +22,12 @@ use rocket::request::Request;
 mod routecache;
 
 #[catch(404)]
-fn sys_not_found(req: &Request) -> String {
+fn sys_not_found(_req: &Request) -> String {
     format!("Sorry, that's not a valid path!")
 }
 
 #[get("/healthz")]
-fn sys_health(cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> String {
+fn sys_health(_cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> String {
     format!("{{\"status\": \"OK\"}}").to_string()
 }
 
