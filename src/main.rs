@@ -59,17 +59,22 @@ fn index_arch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String
     format!("{:?}", versions).to_string()
 }
 
-#[get("/<branch>/<arch>/current/<path..>")]
-fn index_current(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String, path: PathBuf) -> Redirect {
+#[get("/<branch>/<arch>/<version>/<path..>")]
+fn access_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String, version: String, path: PathBuf) -> Redirect {
     let mut cache = cachedb.lock().unwrap();
     cache.sync();
 
     let prefix_url = cache.public_prefix().unwrap();
-    let latest = cache.latest_version(branch.clone(), arch.clone()).unwrap();
     let repo_file = path.to_str().unwrap();
-    let final_url = prefix_url.join(format!("{}/{}/{}/{}", branch, arch, latest.version, repo_file).as_str()).unwrap();
+    let repo = match cache.lookup_repo(branch.clone(), arch.clone(), version.clone()) {
+        Some(r) => r,
+        None => return Redirect::to(format!("..")),
+    };
+
+    let final_url = prefix_url.join(format!("{}/{}", repo.path, repo_file).as_str()).unwrap();
     Redirect::to(final_url.to_string())
 }
+
 
 fn main() {
     let config = match routecache::RouteConfig::new_from_env() {
@@ -87,7 +92,7 @@ fn main() {
 
     rocket::ignite()
         .manage(Arc::new(Mutex::new(cache)))
-        .mount("/", routes![sys_health, index, index_branch, index_arch, index_current])
+        .mount("/", routes![sys_health, index, index_branch, index_arch, access_repo])
         .register(catchers![sys_not_found])
         .launch();
 }

@@ -29,6 +29,7 @@ pub struct Route {
     pub branch: String,
     pub arch: String,
     pub version: String,
+    pub path: String,
 }
 
 #[derive(Clone, Debug)]
@@ -167,7 +168,12 @@ impl RouteCache {
                     Some(v) => v.to_string(),
                     None => continue,
                 };
-                let route = Route{branch: branch, arch: arch, version: version};
+                let route = Route{
+                    branch: branch.clone(),
+                    arch: arch.clone(),
+                    version: version.clone(),
+                    path: format!("{}/{}/{}", branch, arch, version),
+                };
                 if !routes.contains(&route) {
                     routes.push(route);
                 }
@@ -186,14 +192,19 @@ impl RouteCache {
         } else {
             base = format!("https://{}/{}/", self.config.s3_endpoint.clone().unwrap(),
                 self.config.s3_bucket.clone().unwrap());
-            if self.config.s3_prefix != None {
-                base.push_str(format!("{}/", self.config.s3_prefix.clone().unwrap()).as_str());
+            match &self.config.s3_prefix {
+                None => {},
+                Some(p) => {
+                    if p.len() > 0 {
+                        base.push_str(format!("{}/", p).as_str());
+                    }
+                }
             }
         }
         Ok(Url::parse(&base)?)
     }
 
-    pub fn latest_version(&mut self, branch: String, arch: String) -> Option<Route> {
+    fn version_latest(&mut self, branch: String, arch: String) -> Option<Route> {
         let mut potential_routes: Vec<Route> = Vec::new();
         for route in self.routes.iter() {
             if route.branch == branch && route.arch == arch {
@@ -202,6 +213,21 @@ impl RouteCache {
         }
         potential_routes.sort();
         return potential_routes.pop();
+    }
+
+    pub fn lookup_repo(&mut self, branch: String, arch: String, version: String) -> Option<Route> {
+        // If asking for "current" version.
+        if version == "current" {
+            return self.version_latest(branch, arch);
+        }
+
+        // Otherwise just return requested version.
+        for route in self.routes.iter() {
+            if route.branch == branch && route.arch == arch && route.version == version {
+                return Some(route.clone());
+            }
+        }
+        return None;
     }
 
     pub fn branches(&mut self) -> Vec<String> {
