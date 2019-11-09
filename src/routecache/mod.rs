@@ -68,7 +68,7 @@ impl RouteConfig {
     pub fn new() -> RouteConfig {
         RouteConfig {
             s3_public: None,
-            cache_ttl: 30,
+            cache_ttl: 900,
             s3_region: None,
             s3_endpoint: None,
             s3_bucket: None,
@@ -84,7 +84,7 @@ impl RouteConfig {
         // Optional
         config.cache_ttl = match env::var("CACHE_TTL") {
             Ok(v) => v.parse::<u64>()?,
-            Err(_) => 30,
+            Err(_) => 900,
         };
         config.s3_region = match env::var("S3_REGION") {
             Ok(v) => Some(v),
