@@ -2,6 +2,9 @@
 
 "I hope you like [Rust](http://rust-lang.org) and [HTTP Redirects](https://en.wikipedia.org/wiki/URL_redirection#HTTP_status_codes_3xx)" -- Alex v.
 
+This microservice redirects incoming requests to remote s3 buckets while keeping track of aliases
+such as "current" for the repo version.
+
 # Repo format
 
 This microservice expects repos in the following format:
@@ -38,14 +41,13 @@ This microservice expects repos in the following format:
   * S3_PREFIX - Prefix within bucket to repos with no leading / (default "", ex: "myrepos/")
   * PUBLIC_URL - Public URL of object storage. (default: S3_ENDPOINT + S3_BUCKET)
 
-# Bucket Format
-A common bucket data format is assumed inline with Haiku's standard needs:
+# Future Feature Ideas
 
-  * (architecture)/(file or directory with hrev)
-
-# Common Redirector
-A "current" alias within each architecture folder is automatically routed to the latest versioned hrev.
+  * Package popularity contest
+  * Better web ui for repos
+  * Geoip / Geoip aware package redirects
 
 # License
 
+Copyright, 2019 Haiku, Inc. All rights reserved.
 Released under the terms of the MIT license.
