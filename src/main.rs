@@ -73,14 +73,34 @@ fn access_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: Strin
 
 
 fn main() {
-    let config = match routecache::RouteConfig::new_from_env() {
-        Ok(c) => c,
+
+    // Check for Docker / Kubernetes secrets first.
+    let mut config = match routecache::RouteConfig::new_from_secrets() {
+        Ok(c) => {
+            println!("Found configuration secrets at /run/secrets.");
+            Some(c)
+        },
         Err(e) => {
-            println!("Error: {}", e);
-            process::exit(1);
+            println!("Didn't find valid secrets: {}", e);
+            None
         },
     };
-    let mut cache = routecache::RouteCache::new(config);
+
+    // If we can't locate Docker secrets, look at environment vars.
+    if config.is_none() {
+        config = match routecache::RouteConfig::new_from_env() {
+            Ok(c) => {
+                println!("Found environment-based configuration!");
+                Some(c)
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+                process::exit(1);
+            },
+        };
+    };
+
+    let mut cache = routecache::RouteCache::new(config.unwrap());
     match cache.sync() {
         Ok(_) => {},
         Err(e) => println!("Cache Sync Error: {}", e),

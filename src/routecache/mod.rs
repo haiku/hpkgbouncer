@@ -1,4 +1,4 @@
-use std::env;
+use std::{env,fs};
 
 use std::error::Error;
 use std::time::Instant;
@@ -9,6 +9,7 @@ use url::Url;
 use s3::bucket::Bucket;
 use s3::region::Region;
 use s3::credentials::Credentials;
+
 
 #[derive(Clone, Debug)]
 pub struct RouteConfig {
@@ -69,7 +70,7 @@ impl RouteConfig {
         RouteConfig {
             s3_public: None,
             cache_ttl: 900,
-            s3_region: None,
+            s3_region: Some("us-east-1".to_string()),
             s3_endpoint: None,
             s3_bucket: None,
             s3_key: None,
@@ -84,22 +85,22 @@ impl RouteConfig {
         // Optional
         config.cache_ttl = match env::var("CACHE_TTL") {
             Ok(v) => v.parse::<u64>()?,
-            Err(_) => 900,
+            Err(_) => config.cache_ttl,
         };
         config.s3_region = match env::var("S3_REGION") {
             Ok(v) => Some(v),
-            Err(_) => Some("us-east-1".to_string()),
+            Err(_) => config.s3_region,
         };
         config.s3_prefix = match env::var("S3_PREFIX") {
             Ok(v) => Some(v),
-            Err(_) => Some("".to_string()),
+            Err(_) => config.s3_prefix,
         };
         config.s3_public = match env::var("S3_PUBLIC") {
             Ok(v) => Some(v),
             Err(_) => None
         };
 
-        // Required
+        // Required for environment config
         config.s3_endpoint = match env::var("S3_ENDPOINT") {
             Ok(v) => Some(v),
             Err(_) => return Err(From::from("S3_ENDPOINT environment variable is unset!")),
@@ -116,6 +117,41 @@ impl RouteConfig {
             Ok(v) => Some(v),
             Err(_) => return Err(From::from("S3_SECRET environment variable is unset!")),
         };
+        return Ok(config);
+    }
+
+    pub fn new_from_secrets() -> Result<RouteConfig, Box<dyn Error>> {
+        let mut config = RouteConfig::new();
+
+        // Check for required secrets
+        let _ = fs::metadata("/run/secrets/s3_endpoint")?;
+        let _ = fs::metadata("/run/secrets/s3_bucket")?;
+        let _ = fs::metadata("/run/secrets/s3_key")?;
+        let _ = fs::metadata("/run/secrets/s3_secret")?;
+
+        config.s3_endpoint = Some(fs::read_to_string("/run/secrets/s3_endpoint")?.parse()?);
+        config.s3_bucket = Some(fs::read_to_string("/run/secrets/s3_bucket")?.parse()?);
+        config.s3_key = Some(fs::read_to_string("/run/secrets/s3_key")?.parse()?);
+        config.s3_secret = Some(fs::read_to_string("/run/secrets/s3_secret")?.parse()?);
+
+        // Else, optional
+        if fs::metadata("/run/secrets/cache_ttl").is_ok() {
+            let ttl_string: String = fs::read_to_string("/run/secrets/cache_ttl")?.parse()?;
+            config.cache_ttl = ttl_string.parse::<u64>()?;
+        }
+
+        if fs::metadata("/run/secrets/s3_region").is_ok() {
+            config.s3_region = Some(fs::read_to_string("/run/secrets/s3_region")?.parse()?);
+        }
+
+        if fs::metadata("/run/secrets/s3_prefix").is_ok() {
+            config.s3_prefix = Some(fs::read_to_string("/run/secrets/s3_prefix")?.parse()?);
+        }
+
+        if fs::metadata("/run/secrets/s3_public").is_ok() {
+            config.s3_public = Some(fs::read_to_string("/run/secrets/s3_public")?.parse()?);
+        }
+
         return Ok(config);
     }
 }
@@ -148,7 +184,11 @@ impl RouteCache {
         let bucket = Bucket::new(&config.s3_bucket.unwrap(), region, credentials)?;
 
         //let mut architectures: Vec<Architecture> = Vec::new();
-        let base_prefix = config.s3_prefix.unwrap().clone();
+        let base_prefix = match config.s3_prefix {
+            Some(x) => x,
+            None => "".to_string(),
+        };
+
         let results = bucket.list_all(base_prefix, None)?;
         let mut routes: Vec<Route> = Vec::new();
         for (list, _code) in results {
@@ -190,7 +230,7 @@ impl RouteCache {
         } else {
             base = format!("{}/{}/", self.config.s3_endpoint.clone().unwrap(),
                 self.config.s3_bucket.clone().unwrap());
-            match &self.config.s3_prefix {
+            match self.config.s3_prefix.clone() {
                 None => {},
                 Some(p) => {
                     if p.len() > 0 {
