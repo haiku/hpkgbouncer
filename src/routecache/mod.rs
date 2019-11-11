@@ -188,7 +188,7 @@ impl RouteCache {
         if self.config.s3_public != None {
             base = self.config.s3_public.clone().unwrap();
         } else {
-            base = format!("https://{}/{}/", self.config.s3_endpoint.clone().unwrap(),
+            base = format!("{}/{}/", self.config.s3_endpoint.clone().unwrap(),
                 self.config.s3_bucket.clone().unwrap());
             match &self.config.s3_prefix {
                 None => {},
