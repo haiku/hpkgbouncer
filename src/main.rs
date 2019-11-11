@@ -55,6 +55,17 @@ fn index_arch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String
     format!("{:?}", versions).to_string()
 }
 
+#[get("/<branch>/<arch>/<version>")]
+fn index_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String, version: String) -> String {
+    let mut cache = cachedb.lock().unwrap();
+    cache.sync();
+    let repo = match cache.lookup_repo(branch.clone(), arch.clone(), version.clone()) {
+        Some(r) => r,
+        None => return format!("Invalid repo!").to_string(),
+    };
+    format!("{:?}", repo).to_string()
+}
+
 #[get("/<branch>/<arch>/<version>/<path..>")]
 fn access_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String, version: String, path: PathBuf) -> Redirect {
     let mut cache = cachedb.lock().unwrap();
@@ -108,7 +119,7 @@ fn main() {
 
     rocket::ignite()
         .manage(Arc::new(Mutex::new(cache)))
-        .mount("/", routes![sys_health, index, index_branch, index_arch, access_repo])
+        .mount("/", routes![sys_health, index, index_branch, index_arch, index_repo, access_repo])
         .register(catchers![sys_not_found])
         .launch();
 }
