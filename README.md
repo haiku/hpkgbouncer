@@ -1,4 +1,4 @@
-# hpkgserve
+# hpkgbouncer
 
 "I hope you like [Rust](http://rust-lang.org) and [HTTP Redirects](https://en.wikipedia.org/wiki/URL_redirection#HTTP_status_codes_3xx)" -- Alex v.
 

@@ -1,4 +1,4 @@
 default:
-	docker build --no-cache --tag quay.io/kallisti5/reposerv:latest .
+	docker build --no-cache --tag docker.io/haiku/hpkgbouncer:latest .
 push:
-	docker push quay.io/kallisti5/reposerv:latest
+	docker push docker.io/haiku/hpkgbouncer:latest

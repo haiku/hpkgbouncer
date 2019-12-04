@@ -1,8 +1,8 @@
 FROM rustlang/rust:nightly
 
-WORKDIR /usr/srv/hpkgserve
+WORKDIR /usr/srv/hpkgbouncer
 COPY . .
 
 RUN cargo install --path .
 
-CMD ["reposerve"]
+CMD ["hpkgbouncer"]
