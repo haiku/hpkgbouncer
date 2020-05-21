@@ -4,12 +4,13 @@ use std::error::Error;
 use std::time::Instant;
 use std::cmp::Ordering;
 
-use url::Url;
+use natord::compare;
 
 use s3::bucket::Bucket;
 use s3::region::Region;
 use s3::credentials::Credentials;
 
+use url::Url;
 
 #[derive(Clone, Debug)]
 pub struct RouteConfig {
@@ -55,13 +56,13 @@ impl PartialEq for Route {
 
 impl PartialOrd for Route {
     fn partial_cmp(&self, other: &Route) -> Option<Ordering> {
-        Some(self.version.cmp(&other.version))
+        Some(compare(&self.version, &other.version))
     }
 }
 
 impl Ord for Route {
     fn cmp(&self, other: &Route) -> Ordering {
-        self.version.cmp(&other.version)
+        compare(&self.version, &other.version)
     }
 }
 
