@@ -1,5 +1,7 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
+extern crate natord;
+
 extern crate regex;
 
 #[macro_use]

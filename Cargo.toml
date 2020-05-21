@@ -4,9 +4,10 @@ version = "0.1.0"
 authors = ["Alexander von Gluck IV <kallisti5@unixzen.com>"]
 
 [dependencies]
-url = "*"
+natord = "1.0.9"
 rocket = "0.4.2"
 regex = "*"
 rust-s3 = "0.18.3"
-toml = "0.4"
 serde = "*"
+toml = "0.4"
+url = "*"
