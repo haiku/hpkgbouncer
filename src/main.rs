@@ -16,8 +16,10 @@ use std::sync::{Arc,Mutex};
 use std::{process};
 //use std::error::Error;
 use std::path::PathBuf;
+use std::io::Cursor;
 
 use rocket::State;
+use rocket::http::Status;
 use rocket::response::{Response, Redirect};
 use rocket::request::Request;
 
@@ -30,60 +32,91 @@ fn sys_not_found(_req: &Request) -> String {
 
 #[get("/healthz")]
 fn sys_health(_cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> String {
+    // TODO: Maybe trigger cache rebuild?  Needs to be async vs sync though since a healthcheck
+    // timeout could result in the service going unhealthy
     format!("{{\"status\": \"OK\"}}").to_string()
 }
 
 #[get("/")]
-fn index(cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> String {
+fn index(cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> Response {
     let mut cache = cachedb.lock().unwrap();
+    let mut response = Response::new();
     match cache.sync() {
         Ok(_) => {},
-        Err(e) => return format!("Cache Sync Error: {}", e).to_string(),
+        Err(e) => {
+            response.set_sized_body(Cursor::new(format!("Fatal: Cache Sync Failure: {}", e)));
+            response.set_status(Status::InternalServerError);
+            return response;
+        },
     };
     let branches = cache.branches();
-    format!("{:?}", branches).to_string()
+    response.set_sized_body(Cursor::new(format!("{:?}", branches)));
+    response
 }
 
 #[get("/<branch>")]
-fn index_branch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String) -> String {
+fn index_branch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String) -> Response {
     let mut cache = cachedb.lock().unwrap();
+    let mut response = Response::new();
     match cache.sync() {
         Ok(_) => {},
-        Err(e) => return format!("Cache Sync Error: {}", e).to_string(),
+        Err(e) => {
+            response.set_sized_body(Cursor::new(format!("Fatal: Cache Sync Failure: {}", e)));
+            response.set_status(Status::InternalServerError);
+            return response;
+        },
     };
     let arches = cache.architectures(branch);
-    format!("{:?}", arches).to_string()
+    response.set_sized_body(Cursor::new(format!("{:?}", arches)));
+    response
 }
 
 #[get("/<branch>/<arch>")]
-fn index_arch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String) -> String {
+fn index_arch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String) -> Response {
     let mut cache = cachedb.lock().unwrap();
+    let mut response = Response::new();
     match cache.sync() {
         Ok(_) => {},
-        Err(e) => return format!("Cache Sync Error: {}", e).to_string(),
+        Err(e) => {
+            response.set_sized_body(Cursor::new(format!("Fatal: Cache Sync Failure: {}", e)));
+            response.set_status(Status::InternalServerError);
+            return response;
+        },
     };
     let versions = cache.versions(branch, arch);
-    format!("{:?}", versions).to_string()
+    response.set_sized_body(Cursor::new(format!("{:?}", versions)));
+    response
 }
 
 #[get("/<branch>/<arch>/<version>")]
-fn index_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String, version: String) -> String {
+fn index_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String, version: String) -> Response {
     let mut cache = cachedb.lock().unwrap();
+    let mut response = Response::new();
     match cache.sync() {
         Ok(_) => {},
-        Err(e) => return format!("Cache Sync Error: {}", e).to_string(),
+        Err(e) => {
+            response.set_sized_body(Cursor::new(format!("Fatal: Cache Sync Failure: {}", e)));
+            response.set_status(Status::InternalServerError);
+            return response;
+        },
     };
     let repo = match cache.lookup_repo(branch.clone(), arch.clone(), version.clone()) {
         Some(r) => r,
-        None => return format!("Invalid repo!").to_string(),
+        None => {
+            response.set_sized_body(Cursor::new(format!("Invalid repository!")));
+            response.set_status(Status::NotFound);
+            return response;
+        }
     };
-    format!("{:?}", repo).to_string()
+    response.set_sized_body(Cursor::new(format!("{:?}", repo)));
+    response
 }
 
 #[get("/<branch>/<arch>/<version>/<path..>")]
 fn access_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String, version: String, path: PathBuf) -> Redirect {
     let mut cache = cachedb.lock().unwrap();
 
+    // TODO: Handle errors better!
     match cache.sync() {
         Ok(_) => {},
         Err(e) => {
