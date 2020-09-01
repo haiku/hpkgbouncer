@@ -1,6 +1,6 @@
 [package]
 name = "hpkgbouncer"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Alexander von Gluck IV <kallisti5@unixzen.com>"]
 
 [dependencies]

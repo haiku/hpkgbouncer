@@ -225,7 +225,8 @@ impl RouteCache {
     }
 
     pub fn public_prefix(&mut self) -> Result<Url, Box<dyn Error>> {
-        let mut base = String::new();
+        let mut base: String;
+
         if self.config.s3_public != None {
             base = self.config.s3_public.clone().unwrap();
         } else {

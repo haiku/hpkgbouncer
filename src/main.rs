@@ -36,7 +36,10 @@ fn sys_health(_cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> String {
 #[get("/")]
 fn index(cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> String {
     let mut cache = cachedb.lock().unwrap();
-    cache.sync();
+    match cache.sync() {
+        Ok(_) => {},
+        Err(e) => return format!("Cache Sync Error: {}", e).to_string(),
+    };
     let branches = cache.branches();
     format!("{:?}", branches).to_string()
 }
@@ -44,7 +47,10 @@ fn index(cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> String {
 #[get("/<branch>")]
 fn index_branch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String) -> String {
     let mut cache = cachedb.lock().unwrap();
-    cache.sync();
+    match cache.sync() {
+        Ok(_) => {},
+        Err(e) => return format!("Cache Sync Error: {}", e).to_string(),
+    };
     let arches = cache.architectures(branch);
     format!("{:?}", arches).to_string()
 }
@@ -52,7 +58,10 @@ fn index_branch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: Stri
 #[get("/<branch>/<arch>")]
 fn index_arch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String) -> String {
     let mut cache = cachedb.lock().unwrap();
-    cache.sync();
+    match cache.sync() {
+        Ok(_) => {},
+        Err(e) => return format!("Cache Sync Error: {}", e).to_string(),
+    };
     let versions = cache.versions(branch, arch);
     format!("{:?}", versions).to_string()
 }
@@ -60,7 +69,10 @@ fn index_arch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String
 #[get("/<branch>/<arch>/<version>")]
 fn index_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String, version: String) -> String {
     let mut cache = cachedb.lock().unwrap();
-    cache.sync();
+    match cache.sync() {
+        Ok(_) => {},
+        Err(e) => return format!("Cache Sync Error: {}", e).to_string(),
+    };
     let repo = match cache.lookup_repo(branch.clone(), arch.clone(), version.clone()) {
         Some(r) => r,
         None => return format!("Invalid repo!").to_string(),
@@ -71,7 +83,14 @@ fn index_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String
 #[get("/<branch>/<arch>/<version>/<path..>")]
 fn access_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String, version: String, path: PathBuf) -> Redirect {
     let mut cache = cachedb.lock().unwrap();
-    cache.sync();
+
+    match cache.sync() {
+        Ok(_) => {},
+        Err(e) => {
+            println!("Cache Sync Error: {}", e);
+            return Redirect::to(format!(".."));
+        },
+    };
 
     let prefix_url = cache.public_prefix().unwrap();
     let repo_file = path.to_str().unwrap();
