@@ -5,6 +5,11 @@
 This microservice redirects incoming requests to remote s3 buckets while keeping track of aliases
 such as "current" for the repo version.
 
+# Nightly Rust
+
+Rocket *still* requires nightly rust.  It appears Rocket 0.5.0 will no longer
+require nightly rust... then we can flip the docker image to rust:alpine from rustlang/rust:nightly
+
 # Repo format
 
 This microservice expects repos in the following format:
