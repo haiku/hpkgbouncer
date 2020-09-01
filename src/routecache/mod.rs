@@ -1,3 +1,12 @@
+/*
+ * Copyright, 2018-2020 Haiku, Inc., All rights reserved.
+ * Released under the terms of the MIT license
+ *
+ * Authors:
+ *      Alexander von Gluck IV
+ *      Niels Sascha Reedijk
+ */
+
 use std::{env,fs};
 
 use std::error::Error;
