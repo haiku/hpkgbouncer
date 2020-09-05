@@ -22,10 +22,11 @@ extern crate s3;
 extern crate url;
 
 use std::sync::{Arc,Mutex};
-use std::{process};
+use std::{process,thread};
 //use std::error::Error;
 use std::path::PathBuf;
 use std::io::Cursor;
+use std::time::Duration;
 
 use rocket::State;
 use rocket::http::Status;
@@ -40,24 +41,23 @@ fn sys_not_found(_req: &Request) -> String {
 }
 
 #[get("/healthz")]
-fn sys_health(_cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> String {
-    // TODO: Maybe trigger cache rebuild?  Needs to be async vs sync though since a healthcheck
-    // timeout could result in the service going unhealthy
-    format!("{{\"status\": \"OK\"}}").to_string()
+fn sys_health(_cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> Response {
+    let mut response = Response::new();
+
+    // TODO: Report last cache rebuild time?
+    // TODO: Check for issues, report unhealthy?
+    //response.set_sized_body(Cursor::new(format!("Fatal: Cache Sync Failure: {}", e)));
+    //response.set_status(Status::InternalServerError);
+
+    response.set_sized_body(Cursor::new(format!("{{\"status\": \"OK\"}}")));
+    response
 }
 
 #[get("/")]
 fn index(cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> Response {
-    let mut cache = cachedb.lock().unwrap();
     let mut response = Response::new();
-    match cache.sync() {
-        Ok(_) => {},
-        Err(e) => {
-            response.set_sized_body(Cursor::new(format!("Fatal: Cache Sync Failure: {}", e)));
-            response.set_status(Status::InternalServerError);
-            return response;
-        },
-    };
+    // TODO: Handle lock error, return failure
+    let mut cache = cachedb.lock().unwrap();
     let branches = cache.branches();
     response.set_sized_body(Cursor::new(format!("{:?}", branches)));
     response
@@ -65,16 +65,9 @@ fn index(cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> Response {
 
 #[get("/<branch>")]
 fn index_branch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String) -> Response {
-    let mut cache = cachedb.lock().unwrap();
     let mut response = Response::new();
-    match cache.sync() {
-        Ok(_) => {},
-        Err(e) => {
-            response.set_sized_body(Cursor::new(format!("Fatal: Cache Sync Failure: {}", e)));
-            response.set_status(Status::InternalServerError);
-            return response;
-        },
-    };
+    // TODO: Handle lock error, return failure
+    let mut cache = cachedb.lock().unwrap();
     let arches = cache.architectures(branch);
     response.set_sized_body(Cursor::new(format!("{:?}", arches)));
     response
@@ -82,16 +75,9 @@ fn index_branch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: Stri
 
 #[get("/<branch>/<arch>")]
 fn index_arch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String) -> Response {
-    let mut cache = cachedb.lock().unwrap();
     let mut response = Response::new();
-    match cache.sync() {
-        Ok(_) => {},
-        Err(e) => {
-            response.set_sized_body(Cursor::new(format!("Fatal: Cache Sync Failure: {}", e)));
-            response.set_status(Status::InternalServerError);
-            return response;
-        },
-    };
+    // TODO: Handle lock error, return failure
+    let mut cache = cachedb.lock().unwrap();
     let versions = cache.versions(branch, arch);
     response.set_sized_body(Cursor::new(format!("{:?}", versions)));
     response
@@ -99,16 +85,9 @@ fn index_arch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String
 
 #[get("/<branch>/<arch>/<version>")]
 fn index_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String, version: String) -> Response {
-    let mut cache = cachedb.lock().unwrap();
     let mut response = Response::new();
-    match cache.sync() {
-        Ok(_) => {},
-        Err(e) => {
-            response.set_sized_body(Cursor::new(format!("Fatal: Cache Sync Failure: {}", e)));
-            response.set_status(Status::InternalServerError);
-            return response;
-        },
-    };
+    // TODO: Handle lock error, return failure
+    let mut cache = cachedb.lock().unwrap();
     let repo = match cache.lookup_repo(branch.clone(), arch.clone(), version.clone()) {
         Some(r) => r,
         None => {
@@ -123,16 +102,8 @@ fn index_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String
 
 #[get("/<branch>/<arch>/<version>/<path..>")]
 fn access_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String, version: String, path: PathBuf) -> Redirect {
+    // TODO: Handle lock error, return failure?
     let mut cache = cachedb.lock().unwrap();
-
-    // TODO: Handle errors better!
-    match cache.sync() {
-        Ok(_) => {},
-        Err(e) => {
-            println!("Cache Sync Error: {}", e);
-            return Redirect::to(format!(".."));
-        },
-    };
 
     let prefix_url = cache.public_prefix().unwrap();
     let repo_file = path.to_str().unwrap();
@@ -174,14 +145,33 @@ fn main() {
         };
     };
 
+    // Make sure we have a valid cache before handling requests.
     let mut cache = routecache::RouteCache::new(config.unwrap());
     match cache.sync() {
         Ok(_) => {},
         Err(e) => println!("Cache Sync Error: {}", e),
     };
 
+
+    // This mutex gets consumed by multiple threads (the cache rebuilder, and every route.
+    let cache_state = Arc::new(Mutex::new(cache));
+
+    // Trigger a check of our repo cache every 60 seconds to see if it needs rebuilt.
+    let tcache = cache_state.clone();
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_secs(60));
+            let mut c = tcache.lock().unwrap();
+            match c.sync() {
+                Ok(_) => {},
+                Err(e) => println!("Sync: Error: {}", e),
+            }
+        }
+    });
+
+    // Launch our web server, begin serving requests
     rocket::ignite()
-        .manage(Arc::new(Mutex::new(cache)))
+        .manage(cache_state.clone())
         .mount("/", routes![sys_health, index, index_branch, index_arch, index_repo, access_repo])
         .register(catchers![sys_not_found])
         .launch();
