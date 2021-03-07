@@ -17,7 +17,7 @@ use natord::compare;
 
 use s3::bucket::Bucket;
 use s3::region::Region;
-use s3::credentials::Credentials;
+use s3::creds::Credentials;
 
 use url::Url;
 
@@ -190,7 +190,8 @@ impl RouteCache {
             region: config.s3_region.unwrap(),
             endpoint: config.s3_endpoint.unwrap(),
         };
-        let credentials = Credentials::new(config.s3_key, config.s3_secret, None, None);
+        let credentials = Credentials::new(config.s3_key.as_deref(), config.s3_secret.as_deref(),
+		None, None, None)?;
         let bucket = Bucket::new(&config.s3_bucket.unwrap(), region, credentials)?;
 
         //let mut architectures: Vec<Architecture> = Vec::new();
@@ -199,7 +200,8 @@ impl RouteCache {
             None => "".to_string(),
         };
 
-        let results = bucket.list_all(base_prefix, None)?;
+        let results = bucket.list_blocking(base_prefix, None)?;
+
         let mut routes: Vec<Route> = Vec::new();
         for (list, _code) in results {
             for object in list.contents {
