@@ -54,5 +54,5 @@ This microservice expects repos in the following format:
 
 # License
 
-Copyright, 2019 Haiku, Inc. All rights reserved.
+Copyright, 2019-2021 Haiku, Inc. All rights reserved.
 Released under the terms of the MIT license.
