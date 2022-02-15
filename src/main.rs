@@ -15,6 +15,7 @@ extern crate regex;
 
 #[macro_use]
 extern crate rocket;
+extern crate rocket_prometheus;
 
 extern crate toml;
 extern crate s3;
@@ -32,6 +33,7 @@ use rocket::State;
 use rocket::http::Status;
 use rocket::response::{Response, Redirect};
 use rocket::request::Request;
+use rocket_prometheus::PrometheusMetrics;
 
 mod routecache;
 
@@ -152,6 +154,7 @@ fn main() {
         Err(e) => println!("Cache Sync Error: {}", e),
     };
 
+    let prometheus = PrometheusMetrics::new();
 
     // This mutex gets consumed by multiple threads (the cache rebuilder, and every route.
     let cache_state = Arc::new(Mutex::new(cache));
@@ -172,7 +175,9 @@ fn main() {
     // Launch our web server, begin serving requests
     rocket::ignite()
         .manage(cache_state.clone())
+        .attach(prometheus.clone())
         .mount("/", routes![sys_health, index, index_branch, index_arch, index_repo, access_repo])
+        .mount("/metrics", prometheus)
         .register(catchers![sys_not_found])
         .launch();
 }

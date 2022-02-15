@@ -6,6 +6,7 @@ authors = ["Alexander von Gluck IV <kallisti5@unixzen.com>"]
 [dependencies]
 natord = "1.0.9"
 rocket = "0.4"
+rocket_prometheus = "0.9.0"
 regex = "*"
 rust-s3 = { version = "0.29", features = ["default", "blocking"] }
 serde = "*"
