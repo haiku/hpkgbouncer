@@ -1,5 +1,5 @@
 /*
- * Copyright, 2018-2020 Haiku, Inc., All rights reserved.
+ * Copyright, 2018-2022 Haiku, Inc., All rights reserved.
  * Released under the terms of the MIT license
  *
  * Authors:
@@ -75,12 +75,54 @@ impl Ord for Route {
     }
 }
 
+fn sanitize_string(input: String) -> String {
+    input.replace("\n", "")
+}
+
+fn read_from_secrets(name: &str, required: bool) -> Result<Option<String>, Box<dyn Error>> {
+    let metadata = fs::metadata(format!("/run/secrets/{}", name));
+    if required && metadata.is_err() {
+      return Err(From::from(format!("{} secret is unset.", name)));
+    }
+    let raw = match fs::read_to_string(format!("/run/secrets/{}", name)) {
+        Ok(o) => o,
+        Err(_) => {
+            if required {
+                return Err(From::from(format!("Unable to read secret {}", name)));
+            }
+            return Ok(None);
+        }
+    };
+    match raw.parse() {
+        Ok(o) => Ok(Some(sanitize_string(o))),
+        Err(_) => {
+            if required {
+                return Err(From::from(format!("Unable to parse secret {}", name)));
+            }
+            Ok(None)
+        }
+    }
+}
+
+fn read_from_env(name: &str, required: bool) -> Result<Option<String>, Box<dyn Error>> {
+    match env::var(name) {
+        Ok(v) => Ok(Some(sanitize_string(v))),
+        Err(_) => {
+            if required {
+                return Err(From::from(format!("{} environment variable is unset!", name)));
+            }
+            Ok(None)
+        }
+    }
+}
+
+
 impl RouteConfig {
     pub fn new() -> RouteConfig {
         RouteConfig {
             s3_public: None,
             cache_ttl: 900,
-            s3_region: Some("us-east-1".to_string()),
+            s3_region: Some("".to_string()),
             s3_endpoint: None,
             s3_bucket: None,
             s3_key: None,
@@ -92,41 +134,19 @@ impl RouteConfig {
     pub fn new_from_env() -> Result<RouteConfig, Box<dyn Error>> {
         let mut config = RouteConfig::new();
 
-        // Optional
-        config.cache_ttl = match env::var("CACHE_TTL") {
-            Ok(v) => v.parse::<u64>()?,
-            Err(_) => config.cache_ttl,
-        };
-        config.s3_region = match env::var("S3_REGION") {
-            Ok(v) => Some(v),
-            Err(_) => config.s3_region,
-        };
-        config.s3_prefix = match env::var("S3_PREFIX") {
-            Ok(v) => Some(v),
-            Err(_) => config.s3_prefix,
-        };
-        config.s3_public = match env::var("S3_PUBLIC") {
-            Ok(v) => Some(v),
-            Err(_) => None
-        };
+        // Check for required env vars
+        config.s3_endpoint = read_from_env("S3_ENDPOINT", true)?;
+        config.s3_bucket = read_from_env("S3_BUCKET", true)?;
+        config.s3_key = read_from_env("S3_KEY", true)?;
+        config.s3_secret = read_from_env("S3_SECRET", true)?;
 
-        // Required for environment config
-        config.s3_endpoint = match env::var("S3_ENDPOINT") {
-            Ok(v) => Some(v),
-            Err(_) => return Err(From::from("S3_ENDPOINT environment variable is unset!")),
-        };
-        config.s3_bucket = match env::var("S3_BUCKET") {
-            Ok(v) => Some(v),
-            Err(_) => return Err(From::from("S3_BUCKET environment variable is unset!")),
-        };
-        config.s3_key = match env::var("S3_KEY") {
-            Ok(v) => Some(v),
-            Err(_) => return Err(From::from("S3_KEY environment variable is unset!")),
-        };
-        config.s3_secret = match env::var("S3_SECRET") {
-            Ok(v) => Some(v),
-            Err(_) => return Err(From::from("S3_SECRET environment variable is unset!")),
-        };
+        // optional env vars
+        config.cache_ttl = read_from_env("CACHE_TTL", false)?
+            .unwrap_or("900".to_string()).parse::<u64>()?;
+        config.s3_region = read_from_env("S3_REGION", false)?;
+        config.s3_prefix = read_from_env("S3_PREFIX", false)?;
+        config.s3_public = read_from_env("S3_PUBLIC", false)?;
+
         return Ok(config);
     }
 
@@ -134,33 +154,17 @@ impl RouteConfig {
         let mut config = RouteConfig::new();
 
         // Check for required secrets
-        let _ = fs::metadata("/run/secrets/s3_endpoint")?;
-        let _ = fs::metadata("/run/secrets/s3_bucket")?;
-        let _ = fs::metadata("/run/secrets/s3_key")?;
-        let _ = fs::metadata("/run/secrets/s3_secret")?;
-
-        config.s3_endpoint = Some(fs::read_to_string("/run/secrets/s3_endpoint")?.parse()?);
-        config.s3_bucket = Some(fs::read_to_string("/run/secrets/s3_bucket")?.parse()?);
-        config.s3_key = Some(fs::read_to_string("/run/secrets/s3_key")?.parse()?);
-        config.s3_secret = Some(fs::read_to_string("/run/secrets/s3_secret")?.parse()?);
+        config.s3_endpoint = read_from_secrets("s3_endpoint", true)?;
+        config.s3_bucket = read_from_secrets("s3_bucket", true)?;
+        config.s3_key = read_from_secrets("s3_key", true)?;
+        config.s3_secret = read_from_secrets("s3_secret", true)?;
 
         // Else, optional
-        if fs::metadata("/run/secrets/cache_ttl").is_ok() {
-            let ttl_string: String = fs::read_to_string("/run/secrets/cache_ttl")?.parse()?;
-            config.cache_ttl = ttl_string.parse::<u64>()?;
-        }
-
-        if fs::metadata("/run/secrets/s3_region").is_ok() {
-            config.s3_region = Some(fs::read_to_string("/run/secrets/s3_region")?.parse()?);
-        }
-
-        if fs::metadata("/run/secrets/s3_prefix").is_ok() {
-            config.s3_prefix = Some(fs::read_to_string("/run/secrets/s3_prefix")?.parse()?);
-        }
-
-        if fs::metadata("/run/secrets/s3_public").is_ok() {
-            config.s3_public = Some(fs::read_to_string("/run/secrets/s3_public")?.parse()?);
-        }
+        config.cache_ttl = read_from_secrets("cache_ttl", false)?
+            .unwrap_or("900".to_string()).parse::<u64>()?;
+        config.s3_region = read_from_secrets("s3_region", false)?;
+        config.s3_prefix = read_from_secrets("s3_prefix", false)?;
+        config.s3_public = read_from_secrets("s3_public", false)?;
 
         return Ok(config);
     }
@@ -187,9 +191,10 @@ impl RouteCache {
         println!("RouteCache/Sync: TTL expired, refreshing bucket inventory...");
 
         let region = Region::Custom {
-            region: config.s3_region.unwrap(),
+            region: config.s3_region.unwrap_or("us-east-1".to_string()),
             endpoint: config.s3_endpoint.unwrap(),
         };
+
         let credentials = Credentials::new(config.s3_key.as_deref(), config.s3_secret.as_deref(),
 		None, None, None)?;
         let bucket = Bucket::new(&config.s3_bucket.unwrap(), region, credentials)?;
@@ -203,7 +208,7 @@ impl RouteCache {
         let results = bucket.list_blocking(base_prefix, None)?;
 
         let mut routes: Vec<Route> = Vec::new();
-        for (list, _code) in results {
+        for list in results {
             for object in list.contents {
                 let mut fields = object.key.split("/");
                 let branch = match fields.next() {
