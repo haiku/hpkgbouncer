@@ -1,4 +1,4 @@
-FROM rustlang/rust:nightly
+FROM docker.io/rustlang/rust:nightly
 
 WORKDIR /usr/srv/hpkgbouncer
 COPY . .
