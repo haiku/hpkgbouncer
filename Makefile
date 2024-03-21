@@ -1,10 +1,11 @@
-VERSION ?= 0.3.2
+VERSION ?= 0.3.3
+REGISTRY ?= ghcr.io/haiku
 default:
 	cargo clean
-	docker build --no-cache --tag docker.io/haiku/hpkgbouncer:$(VERSION) .
+	docker build --no-cache --tag ${REGISTRY}/hpkgbouncer:$(VERSION) .
 push:
-	docker push docker.io/haiku/hpkgbouncer:$(VERSION)
+	docker push ${REGISTRY}/hpkgbouncer:$(VERSION)
 enter:
-	docker run -it docker.io/haiku/hpkgbouncer:$(VERSION) /bin/bash -l
+	docker run -it ${REGISTRY}/hpkgbouncer:$(VERSION) /bin/bash -l
 test:
-	docker run -v /home/kallisti5/secrets-mount:/run/secrets -P docker.io/haiku/hpkgbouncer:$(VERSION)
+	docker run -v /home/kallisti5/secrets-mount:/run/secrets -P ${REGISTRY}/hpkgbouncer:$(VERSION)

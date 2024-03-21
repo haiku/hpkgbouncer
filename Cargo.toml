@@ -1,14 +1,15 @@
 [package]
 name = "hpkgbouncer"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["Alexander von Gluck IV <kallisti5@unixzen.com>"]
+edition = "2018"
 
 [dependencies]
 natord = "1.0.9"
 rocket = "0.4"
 rocket_prometheus = "0.9.0"
 regex = "*"
-rust-s3 = { version = "0.32", features = ["default", "blocking"] }
+rust-s3 = { version = "0.33", features = ["default", "blocking"] }
 serde = "*"
 toml = "0.5"
 url = "*"

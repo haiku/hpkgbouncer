@@ -49,7 +49,7 @@ pub struct RouteCache {
 }
 
 impl PartialEq for Route {
-    fn eq(&self, other: &Route) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         if self.branch != other.branch {
             return false;
         }
@@ -64,7 +64,7 @@ impl PartialEq for Route {
 }
 
 impl PartialOrd for Route {
-    fn partial_cmp(&self, other: &Route) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(compare(&self.version, &other.version))
     }
 }
@@ -181,6 +181,30 @@ impl RouteCache {
         return route_cache;
     }
 
+    fn is_route_ready(&mut self, route: &Route, bucket: &Bucket) -> Result<bool, Box<dyn Error>> {
+        let requirements = vec!["/repo".to_string(), "/repo.info".to_string(), "/repo.minisig".to_string(),
+            "repo.sha256".to_string()];
+
+        let results = bucket.list_blocking(route.path.clone(), None)?;
+        let mut keys: Vec<String> = Vec::new();
+
+        // collect the contents of the folder
+        for list in results {
+            for object in list.contents {
+                let name = object.key.strip_prefix(&route.path).unwrap_or("");
+                keys.push(name.to_string());
+            }
+        }
+        // Now, validate each file exists
+        for filename in requirements.iter() {
+            if !keys.contains(filename) {
+                println!("{} is not ready yet (missing {})", route.path, filename);
+                return Ok(false);
+            }
+        }
+        return Ok(true);
+    }
+
     pub fn sync(&mut self) -> Result<usize, Box<dyn Error>> {
         let config = self.config.clone();
 
@@ -207,7 +231,9 @@ impl RouteCache {
 
         let results = bucket.list_blocking(base_prefix, None)?;
 
-        let mut routes: Vec<Route> = Vec::new();
+        let mut valid_routes: Vec<Route> = Vec::new();
+        let mut examined_routes: Vec<Route> = Vec::new();
+
         for list in results {
             for object in list.contents {
                 let mut fields = object.key.split("/");
@@ -229,13 +255,20 @@ impl RouteCache {
                     version: version.clone(),
                     path: format!("{}/{}/{}", branch, arch, version),
                 };
-                if !routes.contains(&route) {
-                    routes.push(route);
+                // We track in two stages since an examined route doesn't have to be a valid route
+                if !examined_routes.contains(&route) {
+                    examined_routes.push(route.clone());
+                } else {
+                    continue
+                }
+                if self.is_route_ready(&route, &bucket)? {
+                    println!("Adding {:?}", route);
+                    valid_routes.push(route)
                 }
             }
         }
-        println!("RouteCache/Sync: Complete. {} resources located.", routes.len());
-        self.routes = routes;
+        println!("RouteCache/Sync: Complete. {} resources located.", valid_routes.len());
+        self.routes = valid_routes;
         self.last_update = Some(Instant::now());
         return Ok(0);
     }
