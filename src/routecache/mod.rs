@@ -182,8 +182,7 @@ impl RouteCache {
     }
 
     fn is_route_ready(&mut self, route: &Route, bucket: &Bucket) -> Result<bool, Box<dyn Error>> {
-        let requirements = vec!["/repo".to_string(), "/repo.info".to_string(), "/repo.minisig".to_string(),
-            "repo.sha256".to_string()];
+        let requirements = vec!["repo".to_string(), "repo.sha256".to_string()];
 
         let results = bucket.list_blocking(route.path.clone(), None)?;
         let mut keys: Vec<String> = Vec::new();
@@ -220,7 +219,7 @@ impl RouteCache {
         };
 
         let credentials = Credentials::new(config.s3_key.as_deref(), config.s3_secret.as_deref(),
-		None, None, None)?;
+            None, None, None)?;
         let bucket = Bucket::new(&config.s3_bucket.unwrap(), region, credentials)?;
 
         //let mut architectures: Vec<Architecture> = Vec::new();
@@ -237,6 +236,14 @@ impl RouteCache {
         for list in results {
             for object in list.contents {
                 let mut fields = object.key.split("/");
+
+                // We're only interested in the repo within branch/arch/version folders
+                // This cuts down scan time as we don't care about packages, etc
+                let field_count = fields.clone().count();
+                if field_count != 4 && fields.nth(4) != Some("repo") {
+                    continue
+                }
+
                 let branch = match fields.next() {
                     Some(b) => b.to_string(),
                     None => continue,
@@ -255,16 +262,21 @@ impl RouteCache {
                     version: version.clone(),
                     path: format!("{}/{}/{}", branch, arch, version),
                 };
+
                 // We track in two stages since an examined route doesn't have to be a valid route
-                if !examined_routes.contains(&route) {
-                    examined_routes.push(route.clone());
-                } else {
+                if examined_routes.contains(&route) {
                     continue
                 }
-                if self.is_route_ready(&route, &bucket)? {
-                    println!("Adding {:?}", route);
+                examined_routes.push(route.clone());
+
+                // XXX: We need to rethink this.. it's too damn slow and hammers S3.  We should
+                // probably pass in a listing of all of the files and use the pre-formed list.. or
+                // only validate the "current" route is ready
+
+                //if self.is_route_ready(&route, &bucket)? {
+                //    println!("Adding {:?}", route);
                     valid_routes.push(route)
-                }
+                //}
             }
         }
         println!("RouteCache/Sync: Complete. {} resources located.", valid_routes.len());
