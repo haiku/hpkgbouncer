@@ -7,8 +7,6 @@
  *      Niels Sascha Reedijk
  */
 
-#![feature(proc_macro_hygiene, decl_macro)]
-
 extern crate natord;
 
 extern crate regex;
@@ -26,12 +24,11 @@ use std::sync::{Arc,Mutex};
 use std::{process,thread};
 //use std::error::Error;
 use std::path::PathBuf;
-use std::io::Cursor;
 use std::time::Duration;
 
 use rocket::State;
 use rocket::http::Status;
-use rocket::response::{Response, Redirect};
+use rocket::response::Redirect;
 use rocket::request::Request;
 use rocket_prometheus::PrometheusMetrics;
 
@@ -43,73 +40,60 @@ fn sys_not_found(_req: &Request) -> String {
 }
 
 #[get("/healthz")]
-fn sys_health(_cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> Response {
-    let mut response = Response::new();
+fn sys_health(_cachedb: &State<Arc<Mutex<routecache::RouteCache>>>) -> (Status, String) {
+    (Status::Ok, "{{\"status\": \"OK\"}}".to_string())
 
     // TODO: Report last cache rebuild time?
     // TODO: Check for issues, report unhealthy?
-    //response.set_sized_body(Cursor::new(format!("Fatal: Cache Sync Failure: {}", e)));
+    //response.set_sized_body(None, Cursor::new(format!("Fatal: Cache Sync Failure: {}", e)));
     //response.set_status(Status::InternalServerError);
-
-    response.set_sized_body(Cursor::new(format!("{{\"status\": \"OK\"}}")));
-    response
 }
 
 #[get("/")]
-fn index(cachedb: State<Arc<Mutex<routecache::RouteCache>>>) -> Response {
-    let mut response = Response::new();
+fn index(cachedb: &State<Arc<Mutex<routecache::RouteCache>>>) -> (Status, String) {
     // TODO: Handle lock error, return failure
     let mut cache = cachedb.lock().unwrap();
     let branches = cache.branches();
-    response.set_sized_body(Cursor::new(format!("{:?}", branches)));
-    response
+    (Status::Ok, format!("{:?}", branches))
 }
 
 #[get("/<branch>")]
-fn index_branch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String) -> Response {
-    let mut response = Response::new();
+fn index_branch(cachedb: &State<Arc<Mutex<routecache::RouteCache>>>, branch: &str) -> (Status, String) {
     // TODO: Handle lock error, return failure
     let mut cache = cachedb.lock().unwrap();
-    let arches = cache.architectures(branch);
-    response.set_sized_body(Cursor::new(format!("{:?}", arches)));
-    response
+    let arches = cache.architectures(branch.to_string());
+    (Status::Ok, format!("{:?}", arches))
 }
 
 #[get("/<branch>/<arch>")]
-fn index_arch(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String) -> Response {
-    let mut response = Response::new();
+fn index_arch(cachedb: &State<Arc<Mutex<routecache::RouteCache>>>, branch: &str, arch: &str) -> (Status, String) {
     // TODO: Handle lock error, return failure
     let mut cache = cachedb.lock().unwrap();
-    let versions = cache.versions(branch, arch);
-    response.set_sized_body(Cursor::new(format!("{:?}", versions)));
-    response
+    let versions = cache.versions(branch.to_string(), arch.to_string());
+    (Status::Ok, format!("{:?}", versions))
 }
 
-#[get("/<branch>/<arch>/<version>")]
-fn index_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String, version: String) -> Response {
-    let mut response = Response::new();
+#[get("/<branch>/<arch>/<version>", rank = 1)]
+fn index_repo<'a>(cachedb: &'a State<Arc<Mutex<routecache::RouteCache>>>, branch: &str, arch: &str, version: &str) -> (Status, String) {
     // TODO: Handle lock error, return failure
     let mut cache = cachedb.lock().unwrap();
-    let repo = match cache.lookup_repo(branch.clone(), arch.clone(), version.clone()) {
+    let repo = match cache.lookup_repo(branch.to_string(), arch.to_string(), version.to_string()) {
         Some(r) => r,
         None => {
-            response.set_sized_body(Cursor::new(format!("Invalid repository!")));
-            response.set_status(Status::NotFound);
-            return response;
+            return (Status::NotFound, "Invalid repository".to_string());
         }
     };
-    response.set_sized_body(Cursor::new(format!("{:?}", repo)));
-    response
+    (Status::Ok, format!("{:?}", repo))
 }
 
-#[get("/<branch>/<arch>/<version>/<path..>")]
-fn access_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: String, arch: String, version: String, path: PathBuf) -> Redirect {
+#[get("/<branch>/<arch>/<version>/<path..>", rank = 2)]
+fn access_repo<'a>(cachedb: &'a State<Arc<Mutex<routecache::RouteCache>>>, branch: &str, arch: &str, version: &str, path: PathBuf) -> Redirect {
     // TODO: Handle lock error, return failure?
     let mut cache = cachedb.lock().unwrap();
 
     let prefix_url = cache.public_prefix().unwrap();
     let repo_file = path.to_str().unwrap();
-    let repo = match cache.lookup_repo(branch.clone(), arch.clone(), version.clone()) {
+    let repo = match cache.lookup_repo(branch.to_string(), arch.to_string(), version.to_string()) {
         Some(r) => r,
         None => return Redirect::to(format!("..")),
     };
@@ -119,8 +103,8 @@ fn access_repo(cachedb: State<Arc<Mutex<routecache::RouteCache>>>, branch: Strin
 }
 
 
-fn main() {
-
+#[launch]
+fn rocket() -> _ {
     // Check for Docker / Kubernetes secrets first.
     let mut config = match routecache::RouteConfig::new_from_secrets() {
         Ok(c) => {
@@ -141,7 +125,7 @@ fn main() {
                 Some(c)
             },
             Err(e) => {
-                println!("Error: {}", e);
+                println!("Didn't find environment secrets: {}", e);
                 process::exit(1);
             },
         };
@@ -173,11 +157,10 @@ fn main() {
     });
 
     // Launch our web server, begin serving requests
-    rocket::ignite()
+    rocket::build()
         .manage(cache_state.clone())
         .attach(prometheus.clone())
         .mount("/", routes![sys_health, index, index_branch, index_arch, index_repo, access_repo])
         .mount("/metrics", prometheus)
-        .register(catchers![sys_not_found])
-        .launch();
+        .register("/", catchers![sys_not_found])
 }
