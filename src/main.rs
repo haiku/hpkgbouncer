@@ -105,30 +105,15 @@ fn access_repo<'a>(cachedb: &'a State<Arc<Mutex<routecache::RouteCache>>>, branc
 
 #[launch]
 fn rocket() -> _ {
-    // Check for Docker / Kubernetes secrets first.
-    let mut config = match routecache::RouteConfig::new_from_secrets() {
+    let mut config = match routecache::RouteConfig::init() {
         Ok(c) => {
-            println!("Found configuration secrets at /run/secrets.");
+            println!("Server has been configured.");
             Some(c)
         },
         Err(e) => {
-            println!("Didn't find valid secrets: {}", e);
+            println!("Error in configuration: {}", e);
             None
         },
-    };
-
-    // If we can't locate Docker secrets, look at environment vars.
-    if config.is_none() {
-        config = match routecache::RouteConfig::new_from_env() {
-            Ok(c) => {
-                println!("Found environment-based configuration!");
-                Some(c)
-            },
-            Err(e) => {
-                println!("Didn't find environment secrets: {}", e);
-                process::exit(1);
-            },
-        };
     };
 
     // Make sure we have a valid cache before handling requests.

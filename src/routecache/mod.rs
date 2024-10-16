@@ -131,26 +131,7 @@ impl RouteConfig {
         }
     }
 
-    pub fn new_from_env() -> Result<RouteConfig, Box<dyn Error>> {
-        let mut config = RouteConfig::new();
-
-        // Check for required env vars
-        config.s3_endpoint = read_from_env("S3_ENDPOINT", true)?;
-        config.s3_bucket = read_from_env("S3_BUCKET", true)?;
-        config.s3_key = read_from_env("S3_KEY", true)?;
-        config.s3_secret = read_from_env("S3_SECRET", true)?;
-
-        // optional env vars
-        config.cache_ttl = read_from_env("CACHE_TTL", false)?
-            .unwrap_or("900".to_string()).parse::<u64>()?;
-        config.s3_region = read_from_env("S3_REGION", false)?;
-        config.s3_prefix = read_from_env("S3_PREFIX", false)?;
-        config.s3_public = read_from_env("S3_PUBLIC", false)?;
-
-        return Ok(config);
-    }
-
-    pub fn new_from_secrets() -> Result<RouteConfig, Box<dyn Error>> {
+    pub fn init() -> Result<RouteConfig, Box<dyn Error>> {
         let mut config = RouteConfig::new();
 
         // Check for required secrets
@@ -158,16 +139,25 @@ impl RouteConfig {
         config.s3_bucket = read_from_secrets("s3_bucket", true)?;
         config.s3_key = read_from_secrets("s3_key", true)?;
         config.s3_secret = read_from_secrets("s3_secret", true)?;
-
-        // Else, optional
-        config.cache_ttl = read_from_secrets("cache_ttl", false)?
-            .unwrap_or("900".to_string()).parse::<u64>()?;
         config.s3_region = read_from_secrets("s3_region", false)?;
-        config.s3_prefix = read_from_secrets("s3_prefix", false)?;
-        config.s3_public = read_from_secrets("s3_public", false)?;
+        config.overlay_env()?;
+
+        println!("{:?}", config);
 
         return Ok(config);
     }
+
+    fn overlay_env(&mut self) -> Result<(), Box<dyn Error>> {
+        // optional env vars
+        self.s3_prefix = read_from_env("S3_PREFIX", false)?;
+        self.s3_public = read_from_env("S3_PUBLIC", false)?;
+
+        let cache_ttl = read_from_env("CACHE_TTL", false)?;
+        self.cache_ttl = cache_ttl.unwrap_or("900".to_string()).parse::<u64>()?;
+
+        return Ok(());
+    }
+
 }
 
 impl RouteCache {
@@ -222,20 +212,26 @@ impl RouteCache {
             None, None, None)?;
         let bucket = Bucket::new(&config.s3_bucket.unwrap(), region, credentials)?;
 
-        //let mut architectures: Vec<Architecture> = Vec::new();
+        // take prefix, and normalize it without the trailing /
         let base_prefix = match config.s3_prefix {
-            Some(x) => x,
+            Some(x) => format!("{}/", x.trim_end_matches("/").to_string()),
             None => "".to_string(),
         };
 
-        let results = bucket.list_blocking(base_prefix, None)?;
+        let results = bucket.list_blocking(base_prefix.clone(), None)?;
 
         let mut valid_routes: Vec<Route> = Vec::new();
         let mut examined_routes: Vec<Route> = Vec::new();
 
         for list in results {
             for object in list.contents {
-                let mut fields = object.key.split("/");
+                // trim any potential prefix paths for simple matching
+                let key = object.key.trim_start_matches(&base_prefix).to_string();
+
+                let mut fields = key.split("/");
+                println!("{} vs {}", object.key, key);
+                //advance cursor past prefix
+                //fields.nth(prefix_fields);
 
                 // We're only interested in the repo within branch/arch/version folders
                 // This cuts down scan time as we don't care about packages, etc

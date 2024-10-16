@@ -1,4 +1,4 @@
-VERSION ?= 0.4.0
+VERSION ?= 0.4.1
 REGISTRY ?= ghcr.io/haiku
 default:
 	cargo clean
@@ -8,4 +8,4 @@ push:
 enter:
 	docker run -it ${REGISTRY}/hpkgbouncer:$(VERSION) /bin/bash -l
 test:
-	docker run -v /home/kallisti5/secrets-mount:/run/secrets -P ${REGISTRY}/hpkgbouncer:$(VERSION)
+	docker run -e S3_PREFIX=haiku -e ROCKET_LOG_LEVEL=debug -v /home/kallisti5/secrets-mount:/run/secrets -P ${REGISTRY}/hpkgbouncer:$(VERSION)
