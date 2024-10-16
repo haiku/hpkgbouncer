@@ -21,7 +21,7 @@ extern crate s3;
 extern crate url;
 
 use std::sync::{Arc,Mutex};
-use std::{process,thread};
+use std::thread;
 //use std::error::Error;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -105,7 +105,7 @@ fn access_repo<'a>(cachedb: &'a State<Arc<Mutex<routecache::RouteCache>>>, branc
 
 #[launch]
 fn rocket() -> _ {
-    let mut config = match routecache::RouteConfig::init() {
+    let config = match routecache::RouteConfig::init() {
         Ok(c) => {
             println!("Server has been configured.");
             Some(c)

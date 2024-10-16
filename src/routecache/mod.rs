@@ -140,9 +140,9 @@ impl RouteConfig {
         config.s3_key = read_from_secrets("s3_key", true)?;
         config.s3_secret = read_from_secrets("s3_secret", true)?;
         config.s3_region = read_from_secrets("s3_region", false)?;
-        config.overlay_env()?;
 
-        println!("{:?}", config);
+        // Overlay non-secret things (we probably want to "merge" secrets and env at somepoint)
+        config.overlay_env()?;
 
         return Ok(config);
     }
@@ -151,7 +151,6 @@ impl RouteConfig {
         // optional env vars
         self.s3_prefix = read_from_env("S3_PREFIX", false)?;
         self.s3_public = read_from_env("S3_PUBLIC", false)?;
-
         let cache_ttl = read_from_env("CACHE_TTL", false)?;
         self.cache_ttl = cache_ttl.unwrap_or("900".to_string()).parse::<u64>()?;
 
@@ -229,9 +228,6 @@ impl RouteCache {
                 let key = object.key.trim_start_matches(&base_prefix).to_string();
 
                 let mut fields = key.split("/");
-                println!("{} vs {}", object.key, key);
-                //advance cursor past prefix
-                //fields.nth(prefix_fields);
 
                 // We're only interested in the repo within branch/arch/version folders
                 // This cuts down scan time as we don't care about packages, etc
