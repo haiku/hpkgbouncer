@@ -1,6 +1,6 @@
 [package]
 name = "hpkgbouncer"
-version = "0.4.2"
+version = "0.4.3"
 authors = ["Alexander von Gluck IV <kallisti5@unixzen.com>"]
 edition = "2021"
 
