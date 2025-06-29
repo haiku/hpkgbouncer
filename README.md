@@ -40,6 +40,7 @@ This microservice expects repos in the following format:
   * S3_REGION - Bucket region (default "us-east-1")
   * S3_PREFIX - Prefix within bucket to repos with no leading / (default "", ex: "myrepos/")
   * PUBLIC_URL - Public URL of object storage. (default: S3_ENDPOINT + S3_BUCKET)
+  * VERSION_ALIASES - List of a target version followed by aliases. (ex: "current:ribeta5,r1beta4;whatever:thing")
 
 # Future Feature Ideas
 

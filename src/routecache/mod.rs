@@ -22,6 +22,12 @@ use s3::creds::Credentials;
 use url::Url;
 
 #[derive(Clone, Debug)]
+pub struct AliasMap {
+pub target: String,
+pub versions: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
 pub struct RouteConfig {
     pub s3_public: Option<String>,
     pub cache_ttl: u64,
@@ -31,6 +37,7 @@ pub struct RouteConfig {
     pub s3_key: Option<String>,
     pub s3_secret: Option<String>,
     pub s3_prefix: Option<String>,
+    pub version_alias_maps: Vec<AliasMap>,
 }
 
 #[derive(Clone, Debug, Eq)]
@@ -128,6 +135,7 @@ impl RouteConfig {
             s3_key: None,
             s3_secret: None,
             s3_prefix: None,
+            version_alias_maps: Vec::new(),
         }
     }
 
@@ -151,8 +159,38 @@ impl RouteConfig {
         // optional env vars
         self.s3_prefix = read_from_env("S3_PREFIX", false)?;
         self.s3_public = read_from_env("S3_PUBLIC", false)?;
+
         let cache_ttl = read_from_env("CACHE_TTL", false)?;
         self.cache_ttl = cache_ttl.unwrap_or("900".to_string()).parse::<u64>()?;
+
+        // parse any version aliases
+        let version_alias_raw = match read_from_env("VERSION_ALIASES", false)? {
+            Some(raw) => raw,
+            None => "".to_string(),
+        };
+        for field in version_alias_raw.split(';') {
+            let alias = field.to_string();
+            if alias.contains(":") {
+                let mut alias_maj_fields = alias.split(':').into_iter();
+                let target = match alias_maj_fields.next() {
+                    Some(t) => t.to_string(),
+                    None  => "".to_string(),
+                };
+                let aliases_raw = match alias_maj_fields.next() {
+                    Some(r) => r.to_string(),
+                    None    => "".to_string(),
+                };
+                let mut aliases: Vec<String> = Vec::new();
+                for minor in aliases_raw.split(',') {
+                    aliases.push(minor.to_string())
+                }
+                let map = AliasMap {
+                    target: target.to_string(),
+                    versions: aliases,
+                };
+                self.version_alias_maps.push(map);
+            }
+        }
 
         return Ok(());
     }
@@ -314,9 +352,17 @@ impl RouteCache {
             return self.version_latest(branch, arch);
         }
 
+        let mut actual_version = version.clone();
+        // First, we check for known aliases...
+        for alias in self.config.version_alias_maps.iter() {
+            if alias.versions.contains(&version) {
+                actual_version = alias.target.clone();
+            }
+        }
+
         // Otherwise just return requested version.
         for route in self.routes.iter() {
-            if route.branch == branch && route.arch == arch && route.version == version {
+            if route.branch == branch && route.arch == arch && route.version == actual_version {
                 return Some(route.clone());
             }
         }
