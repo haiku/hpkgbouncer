@@ -22,9 +22,9 @@ use s3::creds::Credentials;
 use url::Url;
 
 #[derive(Clone, Debug)]
-pub struct AliasMap {
-pub target: String,
-pub versions: Vec<String>,
+pub struct BranchAliasMap {
+    pub target: String,
+    pub alternatives: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -37,7 +37,7 @@ pub struct RouteConfig {
     pub s3_key: Option<String>,
     pub s3_secret: Option<String>,
     pub s3_prefix: Option<String>,
-    pub version_alias_maps: Vec<AliasMap>,
+    pub branch_alias_maps: Vec<BranchAliasMap>,
 }
 
 #[derive(Clone, Debug, Eq)]
@@ -135,7 +135,7 @@ impl RouteConfig {
             s3_key: None,
             s3_secret: None,
             s3_prefix: None,
-            version_alias_maps: Vec::new(),
+            branch_alias_maps: Vec::new(),
         }
     }
 
@@ -164,11 +164,11 @@ impl RouteConfig {
         self.cache_ttl = cache_ttl.unwrap_or("900".to_string()).parse::<u64>()?;
 
         // parse any version aliases
-        let version_alias_raw = match read_from_env("VERSION_ALIASES", false)? {
+        let branch_alias_raw = match read_from_env("BRANCH_ALIASES", false)? {
             Some(raw) => raw,
             None => "".to_string(),
         };
-        for field in version_alias_raw.split(';') {
+        for field in branch_alias_raw.split(';') {
             let alias = field.to_string();
             if alias.contains(":") {
                 let mut alias_maj_fields = alias.split(':').into_iter();
@@ -180,15 +180,15 @@ impl RouteConfig {
                     Some(r) => r.to_string(),
                     None    => "".to_string(),
                 };
-                let mut aliases: Vec<String> = Vec::new();
+                let mut alternatives: Vec<String> = Vec::new();
                 for minor in aliases_raw.split(',') {
-                    aliases.push(minor.to_string())
+                    alternatives.push(minor.to_string())
                 }
-                let map = AliasMap {
+                let map = BranchAliasMap {
                     target: target.to_string(),
-                    versions: aliases,
+                    alternatives: alternatives,
                 };
-                self.version_alias_maps.push(map);
+                self.branch_alias_maps.push(map);
             }
         }
 
@@ -347,22 +347,23 @@ impl RouteCache {
     }
 
     pub fn lookup_repo(&mut self, branch: String, arch: String, version: String) -> Option<Route> {
-        // If asking for "current" version.
-        if version == "current" {
-            return self.version_latest(branch, arch);
-        }
 
-        let mut actual_version = version.clone();
-        // First, we check for known aliases...
-        for alias in self.config.version_alias_maps.iter() {
-            if alias.versions.contains(&version) {
-                actual_version = alias.target.clone();
+        // First, we check for known branch aliases...
+        let mut actual_branch = branch.clone();
+        for alias in self.config.branch_alias_maps.iter() {
+            if alias.alternatives.contains(&branch) {
+                actual_branch = alias.target.clone();
             }
         }
 
-        // Otherwise just return requested version.
+        // If asking for "current" version.
+        if version == "current" {
+            return self.version_latest(actual_branch, arch);
+        }
+
+        // Otherwise, we return requested version.
         for route in self.routes.iter() {
-            if route.branch == branch && route.arch == arch && route.version == actual_version {
+            if route.branch == actual_branch && route.arch == arch && route.version == version {
                 return Some(route.clone());
             }
         }
