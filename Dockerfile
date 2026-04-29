@@ -1,4 +1,4 @@
-FROM docker.io/rust:1.84
+FROM docker.io/rust:1.95
 
 WORKDIR /usr/srv/hpkgbouncer
 COPY . .

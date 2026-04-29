@@ -40,13 +40,13 @@ fn sys_not_found(_req: &Request) -> String {
 }
 
 #[get("/healthz")]
-fn sys_health(_cachedb: &State<Arc<Mutex<routecache::RouteCache>>>) -> (Status, String) {
-    (Status::Ok, "{{\"status\": \"OK\"}}".to_string())
-
-    // TODO: Report last cache rebuild time?
-    // TODO: Check for issues, report unhealthy?
-    //response.set_sized_body(None, Cursor::new(format!("Fatal: Cache Sync Failure: {}", e)));
-    //response.set_status(Status::InternalServerError);
+fn sys_health(cachedb: &State<Arc<Mutex<routecache::RouteCache>>>) -> (Status, String) {
+    let cache = cachedb.lock().unwrap();
+    match cache.health() {
+        Ok(()) => (Status::Ok, "{\"status\":\"OK\"}".to_string()),
+        Err(err) => (Status::InternalServerError,
+            format!("{{\"status\":\"ERROR\",\"reason\":{:?}}}", err)),
+    }
 }
 
 #[get("/")]
@@ -118,21 +118,17 @@ fn rocket() -> _ {
 
     // Make sure we have a valid cache before handling requests.
     let mut cache = routecache::RouteCache::new(config.unwrap());
-    match cache.sync() {
-        Ok(_) => {},
-        Err(e) => println!("Cache Sync Error: {}", e),
-    };
 
     let prometheus = PrometheusMetrics::new();
 
     // This mutex gets consumed by multiple threads (the cache rebuilder, and every route.
     let cache_state = Arc::new(Mutex::new(cache));
 
-    // Trigger a check of our repo cache every 60 seconds to see if it needs rebuilt.
+    // Trigger a check of our repo cache every 5 seconds to see if it needs rebuilt.
     let tcache = cache_state.clone();
     thread::spawn(move || {
         loop {
-            thread::sleep(Duration::from_secs(60));
+            thread::sleep(Duration::from_secs(5));
             let mut c = tcache.lock().unwrap();
             match c.sync() {
                 Ok(_) => {},

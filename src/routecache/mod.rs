@@ -51,6 +51,7 @@ pub struct Route {
 #[derive(Clone, Debug)]
 pub struct RouteCache {
     pub last_update: Option<Instant>,
+    pub last_sync_error: Option<String>,
     pub routes: Vec<Route>,
     pub config: RouteConfig,
 }
@@ -202,6 +203,7 @@ impl RouteCache {
         let routes: Vec<Route> = Vec::new();
         let route_cache = RouteCache {
             last_update: None,
+            last_sync_error: None,
             routes: routes,
             config: config,
         };
@@ -232,87 +234,112 @@ impl RouteCache {
     }
 
     pub fn sync(&mut self) -> Result<usize, Box<dyn Error>> {
-        let config = self.config.clone();
+        let result: Result<usize, Box<dyn Error>> = (|| {
+            let config = self.config.clone();
 
-        if self.last_update != None && self.last_update.unwrap().elapsed().as_secs() < config.cache_ttl {
-            return Ok(0);
-        }
+            if self.last_update != None && self.last_update.unwrap().elapsed().as_secs() < config.cache_ttl {
+                return Ok(0);
+            }
 
-        println!("RouteCache/Sync: TTL expired, refreshing bucket inventory...");
+            println!("RouteCache/Sync: TTL expired, refreshing bucket inventory...");
 
-        let region = Region::Custom {
-            region: config.s3_region.unwrap_or("us-east-1".to_string()),
-            endpoint: config.s3_endpoint.unwrap(),
-        };
+            let region = Region::Custom {
+                region: config.s3_region.unwrap_or("us-east-1".to_string()),
+                endpoint: config.s3_endpoint.unwrap(),
+            };
 
-        let credentials = Credentials::new(config.s3_key.as_deref(), config.s3_secret.as_deref(),
-            None, None, None)?;
-        let bucket = Bucket::new(&config.s3_bucket.unwrap(), region, credentials)?;
+            let credentials = Credentials::new(config.s3_key.as_deref(), config.s3_secret.as_deref(),
+                None, None, None)?;
+            let bucket = Bucket::new(&config.s3_bucket.unwrap(), region, credentials)?;
 
-        // take prefix, and normalize it without the trailing /
-        let base_prefix = match config.s3_prefix {
-            Some(x) => format!("{}/", x.trim_end_matches("/").to_string()),
-            None => "".to_string(),
-        };
+            // take prefix, and normalize it without the trailing /
+            let base_prefix = match config.s3_prefix {
+                Some(x) => format!("{}/", x.trim_end_matches("/").to_string()),
+                None => "".to_string(),
+            };
 
-        let results = bucket.list_blocking(base_prefix.clone(), None)?;
+            let results = bucket.list_blocking(base_prefix.clone(), None)?;
 
-        let mut valid_routes: Vec<Route> = Vec::new();
-        let mut examined_routes: Vec<Route> = Vec::new();
+            let mut valid_routes: Vec<Route> = Vec::new();
+            let mut examined_routes: Vec<Route> = Vec::new();
 
-        for list in results {
-            for object in list.contents {
-                // trim any potential prefix paths for simple matching
-                let key = object.key.trim_start_matches(&base_prefix).to_string();
+            for list in results {
+                for object in list.contents {
+                    // trim any potential prefix paths for simple matching
+                    let key = object.key.trim_start_matches(&base_prefix).to_string();
 
-                let mut fields = key.split("/");
+                    let mut fields = key.split("/");
 
-                // We're only interested in the repo within branch/arch/version folders
-                // This cuts down scan time as we don't care about packages, etc
-                let field_count = fields.clone().count();
-                if field_count != 4 && fields.nth(4) != Some("repo") {
-                    continue
+                    // We're only interested in the repo within branch/arch/version folders
+                    // This cuts down scan time as we don't care about packages, etc
+                    let field_count = fields.clone().count();
+                    if field_count != 4 && fields.nth(4) != Some("repo") {
+                        continue
+                    }
+
+                    let branch = match fields.next() {
+                        Some(b) => b.to_string(),
+                        None => continue,
+                    };
+                    let arch = match fields.next() {
+                        Some(a) => a.to_string(),
+                        None => continue,
+                    };
+                    let version = match fields.next() {
+                        Some(v) => v.to_string(),
+                        None => continue,
+                    };
+                    let route = Route{
+                        branch: branch.clone(),
+                        arch: arch.clone(),
+                        version: version.clone(),
+                        path: format!("{}/{}/{}", branch, arch, version),
+                    };
+
+                    // We track in two stages since an examined route doesn't have to be a valid route
+                    if examined_routes.contains(&route) {
+                        continue
+                    }
+                    examined_routes.push(route.clone());
+
+                    // XXX: We need to rethink this.. it's too damn slow and hammers S3.  We should
+                    // probably pass in a listing of all of the files and use the pre-formed list.. or
+                    // only validate the "current" route is ready
+
+                    //if self.is_route_ready(&route, &bucket)? {
+                    //    println!("Adding {:?}", route);
+                        valid_routes.push(route)
+                    //}
                 }
+            }
 
-                let branch = match fields.next() {
-                    Some(b) => b.to_string(),
-                    None => continue,
-                };
-                let arch = match fields.next() {
-                    Some(a) => a.to_string(),
-                    None => continue,
-                };
-                let version = match fields.next() {
-                    Some(v) => v.to_string(),
-                    None => continue,
-                };
-                let route = Route{
-                    branch: branch.clone(),
-                    arch: arch.clone(),
-                    version: version.clone(),
-                    path: format!("{}/{}/{}", branch, arch, version),
-                };
+            println!("RouteCache/Sync: Complete. {} resources located.", valid_routes.len());
+            self.routes = valid_routes;
+            self.last_update = Some(Instant::now());
 
-                // We track in two stages since an examined route doesn't have to be a valid route
-                if examined_routes.contains(&route) {
-                    continue
-                }
-                examined_routes.push(route.clone());
+            Ok(0)
+        })();
 
-                // XXX: We need to rethink this.. it's too damn slow and hammers S3.  We should
-                // probably pass in a listing of all of the files and use the pre-formed list.. or
-                // only validate the "current" route is ready
-
-                //if self.is_route_ready(&route, &bucket)? {
-                //    println!("Adding {:?}", route);
-                    valid_routes.push(route)
-                //}
+        match result {
+            Ok(count) => {
+                self.last_sync_error = None;
+                Ok(count)
+            }
+            Err(err) => {
+                self.last_sync_error = Some(err.to_string());
+                Err(err)
             }
         }
-        println!("RouteCache/Sync: Complete. {} resources located.", valid_routes.len());
-        self.routes = valid_routes;
-        self.last_update = Some(Instant::now());
-        return Ok(0);
+    }
+
+    pub fn health(&self) -> Result<(), String> {
+        if let Some(err) = &self.last_sync_error {
+            return Err(format!("cache sync failure: {}", err));
+        }
+        if self.last_update.is_none() {
+            return Err("cache has not completed an initial sync".to_string());
+        }
+        Ok(())
     }
 
     pub fn public_prefix(&mut self) -> Result<Url, Box<dyn Error>> {
