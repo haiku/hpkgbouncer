@@ -20,7 +20,7 @@ extern crate s3;
 
 extern crate url;
 
-use std::sync::{Arc,Mutex};
+use std::sync::{Arc,RwLock};
 use std::thread;
 //use std::error::Error;
 use std::path::PathBuf;
@@ -40,8 +40,8 @@ fn sys_not_found(_req: &Request) -> String {
 }
 
 #[get("/healthz")]
-fn sys_health(cachedb: &State<Arc<Mutex<routecache::RouteCache>>>) -> (Status, String) {
-    let cache = cachedb.lock().unwrap();
+fn sys_health(cachedb: &State<Arc<RwLock<routecache::RouteCache>>>) -> (Status, String) {
+    let cache = cachedb.read().unwrap();
     match cache.health() {
         Ok(()) => (Status::Ok, "{\"status\":\"OK\"}".to_string()),
         Err(err) => (Status::InternalServerError,
@@ -50,33 +50,33 @@ fn sys_health(cachedb: &State<Arc<Mutex<routecache::RouteCache>>>) -> (Status, S
 }
 
 #[get("/")]
-fn index(cachedb: &State<Arc<Mutex<routecache::RouteCache>>>) -> (Status, String) {
+fn index(cachedb: &State<Arc<RwLock<routecache::RouteCache>>>) -> (Status, String) {
     // TODO: Handle lock error, return failure
-    let mut cache = cachedb.lock().unwrap();
+    let cache = cachedb.read().unwrap();
     let branches = cache.branches();
     (Status::Ok, format!("{:?}", branches))
 }
 
 #[get("/<branch>")]
-fn index_branch(cachedb: &State<Arc<Mutex<routecache::RouteCache>>>, branch: &str) -> (Status, String) {
+fn index_branch(cachedb: &State<Arc<RwLock<routecache::RouteCache>>>, branch: &str) -> (Status, String) {
     // TODO: Handle lock error, return failure
-    let mut cache = cachedb.lock().unwrap();
+    let cache = cachedb.read().unwrap();
     let arches = cache.architectures(branch.to_string());
     (Status::Ok, format!("{:?}", arches))
 }
 
 #[get("/<branch>/<arch>")]
-fn index_arch(cachedb: &State<Arc<Mutex<routecache::RouteCache>>>, branch: &str, arch: &str) -> (Status, String) {
+fn index_arch(cachedb: &State<Arc<RwLock<routecache::RouteCache>>>, branch: &str, arch: &str) -> (Status, String) {
     // TODO: Handle lock error, return failure
-    let mut cache = cachedb.lock().unwrap();
+    let cache = cachedb.read().unwrap();
     let versions = cache.versions(branch.to_string(), arch.to_string());
     (Status::Ok, format!("{:?}", versions))
 }
 
 #[get("/<branch>/<arch>/<version>", rank = 1)]
-fn index_repo<'a>(cachedb: &'a State<Arc<Mutex<routecache::RouteCache>>>, branch: &str, arch: &str, version: &str) -> (Status, String) {
+fn index_repo<'a>(cachedb: &'a State<Arc<RwLock<routecache::RouteCache>>>, branch: &str, arch: &str, version: &str) -> (Status, String) {
     // TODO: Handle lock error, return failure
-    let mut cache = cachedb.lock().unwrap();
+    let cache = cachedb.read().unwrap();
     let repo = match cache.lookup_repo(branch.to_string(), arch.to_string(), version.to_string()) {
         Some(r) => r,
         None => {
@@ -87,9 +87,9 @@ fn index_repo<'a>(cachedb: &'a State<Arc<Mutex<routecache::RouteCache>>>, branch
 }
 
 #[get("/<branch>/<arch>/<version>/<path..>", rank = 2)]
-fn access_repo<'a>(cachedb: &'a State<Arc<Mutex<routecache::RouteCache>>>, branch: &str, arch: &str, version: &str, path: PathBuf) -> Redirect {
+fn access_repo<'a>(cachedb: &'a State<Arc<RwLock<routecache::RouteCache>>>, branch: &str, arch: &str, version: &str, path: PathBuf) -> Redirect {
     // TODO: Handle lock error, return failure?
-    let mut cache = cachedb.lock().unwrap();
+    let cache = cachedb.read().unwrap();
 
     let prefix_url = cache.public_prefix().unwrap();
     let repo_file = path.to_str().unwrap();
@@ -117,19 +117,19 @@ fn rocket() -> _ {
     };
 
     // Make sure we have a valid cache before handling requests.
-    let mut cache = routecache::RouteCache::new(config.unwrap());
+    let cache = routecache::RouteCache::new(config.unwrap());
 
     let prometheus = PrometheusMetrics::new();
 
-    // This mutex gets consumed by multiple threads (the cache rebuilder, and every route.
-    let cache_state = Arc::new(Mutex::new(cache));
+    // This lock is consumed by multiple threads: the cache rebuilder and request handlers.
+    let cache_state = Arc::new(RwLock::new(cache));
 
     // Trigger a check of our repo cache every 5 seconds to see if it needs rebuilt.
     let tcache = cache_state.clone();
     thread::spawn(move || {
         loop {
             thread::sleep(Duration::from_secs(5));
-            let mut c = tcache.lock().unwrap();
+            let mut c = tcache.write().unwrap();
             match c.sync() {
                 Ok(_) => {},
                 Err(e) => println!("Sync: Error: {}", e),

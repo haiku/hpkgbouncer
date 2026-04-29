@@ -342,7 +342,7 @@ impl RouteCache {
         Ok(())
     }
 
-    pub fn public_prefix(&mut self) -> Result<Url, Box<dyn Error>> {
+    pub fn public_prefix(&self) -> Result<Url, Box<dyn Error>> {
         let mut base: String;
 
         if self.config.s3_public != None {
@@ -362,7 +362,7 @@ impl RouteCache {
         Ok(Url::parse(&base)?)
     }
 
-    fn version_latest(&mut self, branch: String, arch: String) -> Option<Route> {
+    fn version_latest(&self, branch: String, arch: String) -> Option<Route> {
         let mut potential_routes: Vec<Route> = Vec::new();
         for route in self.routes.iter() {
             if route.branch == branch && route.arch == arch {
@@ -373,7 +373,7 @@ impl RouteCache {
         return potential_routes.pop();
     }
 
-    pub fn lookup_repo(&mut self, branch: String, arch: String, version: String) -> Option<Route> {
+    pub fn lookup_repo(&self, branch: String, arch: String, version: String) -> Option<Route> {
 
         // First, we check for known branch aliases...
         let mut actual_branch = branch.clone();
@@ -397,7 +397,7 @@ impl RouteCache {
         return None;
     }
 
-    pub fn branches(&mut self) -> Vec<String> {
+    pub fn branches(&self) -> Vec<String> {
         let mut branches: Vec<String> = Vec::new();
         for route in self.routes.iter() {
             if !branches.contains(&route.branch) {
@@ -407,7 +407,7 @@ impl RouteCache {
         branches
     }
 
-    pub fn architectures(&mut self, branch: String) -> Vec<String> {
+    pub fn architectures(&self, branch: String) -> Vec<String> {
         let mut arches: Vec<String> = Vec::new();
         for route in self.routes.iter() {
             if route.branch != branch {
@@ -420,7 +420,7 @@ impl RouteCache {
         arches
     }
 
-    pub fn versions(&mut self, branch: String, arch: String) -> Vec<String> {
+    pub fn versions(&self, branch: String, arch: String) -> Vec<String> {
         let mut versions: Vec<String> = Vec::new();
         for route in self.routes.iter() {
             if route.branch != branch || route.arch != arch {
