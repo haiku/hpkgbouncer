@@ -1,6 +1,6 @@
 [package]
 name = "hpkgbouncer"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Alexander von Gluck IV <alex@terarocket.io>"]
 edition = "2024"
 
